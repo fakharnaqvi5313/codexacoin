@@ -222,3 +222,65 @@ void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevo
     CStakeCache c((coinPrev.nTime ? coinPrev.nTime : blockFrom->nTime), coinPrev.out.nValue);
     cache.insert({prevout, c});
 }
+
+// CodexaCoin: coin-age-proportional staking reward (spec Appendix A).
+//
+// IMPORTANT: this affects the REWARD only. The PoS v3 kernel/stake-eligibility
+// weight computed in CheckStakeKernelHash() above remains strictly amount-only
+// (bnWeight = arith_uint256(nValueIn), no age term) -- that is Blackcoin's
+// existing fix against coin-age-hoarding attacks on stake *eligibility*, and
+// this code does not touch it. Coin-age is reintroduced here, in reward
+// calculation, only.
+//
+//   coinage_coinsec = value_satoshis * min(age_seconds, AGE_CAP_SECONDS)
+//   nReward         = coinage_coinsec * STAKE_REWARD_ANNUAL_BP
+//                      / (10000 * SECONDS_PER_YEAR)
+//
+// 128-bit intermediate math (arith_uint256) is required: at CodexaCoin's
+// premine scale (14e9 CAC = 1.4e18 satoshis) a single large input times a
+// 60-day age cap (5,184,000 seconds) overflows int64 by several orders of
+// magnitude (1.4e18 * 5.184e6 ~= 7.3e24, vs int64 max ~9.2e18).
+CAmount ComputeCoinAgeReward(CAmount valueSat, int64_t ageSeconds, const Consensus::Params& params)
+{
+    if (valueSat <= 0 || ageSeconds <= 0)
+        return 0;
+
+    int64_t cappedAge = std::min(ageSeconds, params.nStakeRewardAgeCapSeconds);
+
+    arith_uint256 coinSeconds = arith_uint256(static_cast<uint64_t>(valueSat)) * arith_uint256(static_cast<uint64_t>(cappedAge));
+    arith_uint256 numerator = coinSeconds * arith_uint256(static_cast<uint64_t>(params.nStakeRewardAnnualBP));
+    arith_uint256 denominator = arith_uint256(10000) * arith_uint256(static_cast<uint64_t>(SECONDS_PER_YEAR));
+    arith_uint256 reward256 = numerator / denominator;
+
+    static const arith_uint256 nMaxCAmount = arith_uint256(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+    if (reward256 > nMaxCAmount) {
+        // Defensive clamp; should be unreachable for any realistic single
+        // input under MAX_MONEY, but never let a reward computation wrap
+        // negative.
+        return std::numeric_limits<int64_t>::max();
+    }
+    return static_cast<CAmount>(reward256.GetLow64());
+}
+
+// Sums ComputeCoinAgeReward() across every input of a coinstake transaction,
+// resolving each input's origin timestamp the same way CheckProofOfStake()
+// resolves the kernel's: Coin.nTime if set, else the origin block's time.
+// Used both to independently verify a submitted coinstake's reward during
+// ConnectBlock() and (by the wallet, with its own already-loaded prevouts)
+// to construct a valid coinstake in the first place.
+CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction& tx, CCoinsViewCache& view, unsigned int nTimeTx, const Consensus::Params& params)
+{
+    CAmount nTotal = 0;
+    for (const CTxIn& txin : tx.vin) {
+        Coin coinPrev;
+        if (!view.GetCoin(txin.prevout, coinPrev))
+            continue; // Caller (ConnectBlock/CheckTxInputs) already rejects missing prevouts elsewhere.
+
+        const CBlockIndex* blockFrom = pindexPrev->GetAncestor(coinPrev.nHeight);
+        int64_t originTime = coinPrev.nTime ? (int64_t)coinPrev.nTime : (blockFrom ? blockFrom->nTime : 0);
+        int64_t age = (int64_t)nTimeTx - originTime;
+
+        nTotal += ComputeCoinAgeReward(coinPrev.out.nValue, age, params);
+    }
+    return nTotal;
+}

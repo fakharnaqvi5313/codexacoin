@@ -6,6 +6,7 @@
 // Copyright (c) 2016-2023 The Qtum developers
 
 #include <index/txindex.h>
+#include <pos.h>
 #include <wallet/coincontrol.h>
 #include <wallet/receive.h>
 #include <wallet/staking.h>
@@ -287,6 +288,13 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
         return false;
 
     CAmount nCredit = 0;
+    // CodexaCoin: running coin-age-proportional reward, accumulated per
+    // input as it's added below (kernel input, then any combined inputs).
+    // Mirrors GetCoinstakeMaxReward() in pos.cpp so the wallet never builds
+    // a coinstake that consensus would reject for paying too much, and
+    // never leaves reward on the table by understaking relative to what's
+    // actually allowed.
+    CAmount nCoinAgeReward = 0;
     bool fKernelFound = false;
     CScript scriptPubKeyKernel, scriptPubKeyOut;
     bool bMinterKey = false;
@@ -376,6 +384,10 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
                 txNew.nTime -= n;
                 txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
                 nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
+                nCoinAgeReward += ComputeCoinAgeReward(
+                    pcoin.first->tx->vout[pcoin.second].nValue,
+                    (int64_t)txNew.nTime - (int64_t)pcoin.first->tx->nTime,
+                    Params().GetConsensus());
                 vwtxPrev.push_back(tx);
 
                 if (bMinterKey) {
@@ -428,12 +440,19 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
 
             txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
             nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
+            nCoinAgeReward += ComputeCoinAgeReward(
+                pcoin.first->tx->vout[pcoin.second].nValue,
+                (int64_t)txNew.nTime - (int64_t)pcoin.first->tx->nTime,
+                Params().GetConsensus());
             vwtxPrev.push_back(tx);
         }
     }
 
     // Calculate reward
-    CAmount nReward = nFees + GetProofOfStakeSubsidy();
+    // CodexaCoin: coin-age-proportional reward (nCoinAgeReward, accumulated
+    // above per input) replaces Blackcoin's flat GetProofOfStakeSubsidy().
+    // See PARAMETERS.md section 6 / spec Appendix A.
+    CAmount nReward = nFees + nCoinAgeReward;
     if (nReward < 0)
         return false;
 
@@ -443,7 +462,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
 
     if (isDevFundEnabled)
     {
-        nDevCredit = (GetProofOfStakeSubsidy() * wallet.m_donation_percentage) / 100;
+        nDevCredit = (nCoinAgeReward * wallet.m_donation_percentage) / 100;
         nMinerCredit = nReward - nDevCredit;
         nCredit += nMinerCredit;
     }

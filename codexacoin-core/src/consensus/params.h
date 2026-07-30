@@ -6,6 +6,7 @@
 #ifndef BITCOIN_CONSENSUS_PARAMS_H
 #define BITCOIN_CONSENSUS_PARAMS_H
 
+#include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <uint256.h>
 
@@ -122,6 +123,24 @@ struct Params {
     int nLastPOWBlock;
     int nStakeTimestampMask;
     int nCoinbaseMaturity;
+    /**
+     * CodexaCoin: total premine (in satoshis) minted across the fixed PoW
+     * window (blocks 1..nLastPOWBlock), split evenly per block. See
+     * PARAMETERS.md section 5 for the design rationale. Zero on networks
+     * that don't premine (kept as a knob per-network rather than a single
+     * global constant so testnet/regtest can use smaller values).
+     */
+    CAmount nPremineTotal;
+    /**
+     * CodexaCoin: coin-age-proportional staking reward parameters
+     * (see PARAMETERS.md section 6 / spec Appendix A). The PoS v3 kernel
+     * weight (stake-eligibility) remains amount-only and is NOT affected by
+     * these -- they only bound the reward a coinstake is allowed to mint.
+     */
+    /** Target annual reward rate in basis points (1368 = 13.68%/yr = 1.14%/mo) */
+    int64_t nStakeRewardAnnualBP;
+    /** Coin-age accrual cap per input, in seconds (default 60 days) */
+    int64_t nStakeRewardAgeCapSeconds;
     /** The best chain should have at least this much work */
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */

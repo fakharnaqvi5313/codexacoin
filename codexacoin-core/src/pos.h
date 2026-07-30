@@ -24,6 +24,10 @@
 
 using namespace std;
 
+/** CodexaCoin: seconds in a Gregorian year (365.2425 days), used by the
+ *  coin-age reward formula. Not network-specific. */
+static constexpr int64_t SECONDS_PER_YEAR = 31556952;
+
 /** Compute the hash modifier for proof-of-stake */
 uint256 ComputeStakeModifier(const CBlockIndex* pindexPrev, const uint256& kernel);
 
@@ -42,4 +46,9 @@ bool CheckKernel(CBlockIndex* pindexPrev, unsigned int nBits, uint32_t nTime, co
 bool CheckStakeKernelHash(const CBlockIndex* pindexPrev, unsigned int nBits, uint32_t blockFromTime, CAmount prevoutValue, const COutPoint& prevout, unsigned int nTimeTx, bool fPrintProofOfStake = false);
 bool CheckProofOfStake(CBlockIndex* pindexPrev, const CTransaction& tx, unsigned int nBits, BlockValidationState& state, CCoinsViewCache& view, unsigned int nTimeTx);
 void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevout, CBlockIndex* pindexPrev, CCoinsViewCache& view);
+
+/** CodexaCoin: coin-age-proportional staking reward (see pos.cpp for the full derivation). */
+CAmount ComputeCoinAgeReward(CAmount valueSat, int64_t ageSeconds, const Consensus::Params& params);
+CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction& tx, CCoinsViewCache& view, unsigned int nTimeTx, const Consensus::Params& params);
+
 #endif // CODEXACOIN_POS_H

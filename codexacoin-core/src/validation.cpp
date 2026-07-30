@@ -1657,11 +1657,33 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams, b
 // CodexaCoin
 CAmount GetProofOfWorkSubsidy()
 {
-    return 10000 * COIN;
+    const Consensus::Params& params = Params().GetConsensus();
+    if (params.nLastPOWBlock <= 0 || params.nPremineTotal <= 0)
+        return 0;
+    // CodexaCoin: the entire premine is minted evenly across the fixed PoW
+    // window (blocks 1..nLastPOWBlock), mined privately pre-launch and
+    // checkpointed. See PARAMETERS.md section 5 for the design rationale
+    // (window length chosen to exactly equal nCoinbaseMaturity so PoS can
+    // take over at block nLastPOWBlock+1 with no staking-eligibility gap).
+    return params.nPremineTotal / params.nLastPOWBlock;
 }
 
 CAmount GetProofOfStakeSubsidy()
 {
+    // CodexaCoin: retained only as a legacy/statistics-only placeholder.
+    // Actual PoS block rewards are coin-age-proportional (see
+    // pos.cpp::GetCoinstakeMaxReward / ComputeCoinAgeReward) and vary per
+    // coinstake depending on its specific inputs' value and age -- they are
+    // no longer a fixed value derivable from block height alone.
+    // ConnectBlock() does NOT use this value for PoS block validation (see
+    // nMaxStakeReward there); it remains here only because a few
+    // non-consensus indexing/RPC code paths (coinstatsindex.cpp,
+    // getblockstats's "subsidy" field) still call GetBlockSubsidy(height,
+    // params, /*fProofOfStake=*/true) for informational display and have
+    // not yet been updated to read actual per-block coinstake output
+    // values instead. Those specific figures will not reflect real rewards
+    // post-coin-age-reward; fixing them is tracked as Phase-1 follow-up,
+    // not required for consensus correctness.
     return COIN * 3 / 2;
 }
 
@@ -2207,9 +2229,18 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     assert(hashPrevBlock == view.GetBestBlock());
 
     // Check proof-of-stake
-    if (block.IsProofOfStake() && params.GetConsensus().IsProtocolV3(block.GetBlockTime()) && !CheckProofOfStake(pindex->pprev, *block.vtx[1], block.nBits, state, view, block.vtx[1]->nTime ? block.vtx[1]->nTime : block.nTime)) {
-        LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
-        return false; // do not error here as we expect this during initial block download
+    CAmount nMaxStakeReward = 0;
+    if (block.IsProofOfStake() && params.GetConsensus().IsProtocolV3(block.GetBlockTime())) {
+        unsigned int nCoinstakeTime = block.vtx[1]->nTime ? block.vtx[1]->nTime : block.nTime;
+        if (!CheckProofOfStake(pindex->pprev, *block.vtx[1], block.nBits, state, view, nCoinstakeTime)) {
+            LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
+            return false; // do not error here as we expect this during initial block download
+        }
+        // CodexaCoin: coin-age-proportional reward cap, computed from the
+        // coinstake's actual inputs while `view` still reflects chain state
+        // strictly before this block (none of its own transactions have
+        // updated the coin set yet). See pos.cpp::GetCoinstakeMaxReward.
+        nMaxStakeReward = GetCoinstakeMaxReward(pindex->pprev, *block.vtx[1], view, nCoinstakeTime, params.GetConsensus());
     }
 
     num_blocks_total++;
@@ -2391,7 +2422,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
 
     if (block.IsProofOfStake() && params.GetConsensus().IsProtocolV3(block.GetBlockTime())) {
-        CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, params.GetConsensus(), true);
+        // CodexaCoin: coin-age-proportional cap (nMaxStakeReward), not the
+        // old flat GetProofOfStakeSubsidy(). Computed above, alongside
+        // CheckProofOfStake(), from the coinstake's own inputs.
+        CAmount blockReward = nFees + nMaxStakeReward;
         if (nActualStakeReward > blockReward) {
             LogPrintf("ERROR: ConnectBlock(): coinstake pays too much (actual=%d vs limit=%d)\n", nActualStakeReward, blockReward);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cs-amount");
