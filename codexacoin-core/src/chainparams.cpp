@@ -133,7 +133,7 @@ void SelectParams(const ChainType chain)
     globalChainParams = CreateChainParams(gArgs, chain);
 }
 
-// Blackcoin: Donations to dev fund 
+// CodexaCoin: Donations to dev fund 
 std::string CChainParams::GetDevFundAddress() const
 {
     return !vDevFundAddress.empty() ? vDevFundAddress[0] : "";

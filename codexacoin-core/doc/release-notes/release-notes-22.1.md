@@ -107,7 +107,7 @@ Credits
 Thanks to everyone who directly contributed to this release:
 
 - Andrew Chow
-- BlackcoinDev
+- CodexaCoinDev
 - Carl Dong
 - Hennadii Stepanov
 - Joan Karadimov

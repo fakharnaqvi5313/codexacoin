@@ -36,7 +36,7 @@
 #include <utility>
 #include <variant>
 
-const char * const BITCOIN_CONF_FILENAME = "blackmore.conf";
+const char * const BITCOIN_CONF_FILENAME = "codexacoin.conf";
 const char * const BITCOIN_SETTINGS_FILENAME = "settings.json";
 
 ArgsManager gArgs;
@@ -685,12 +685,12 @@ std::string HelpMessageOpt(const std::string &option, const std::string &message
 
 fs::path GetDefaultDataDir()
 {
-    // Windows: C:\Users\Username\AppData\Roaming\Blackmore
-    // macOS: ~/Library/Application Support/Blackmore
-    // Unix-like: ~/.blackmore
+    // Windows: C:\Users\Username\AppData\Roaming\CodexaCoin
+    // macOS: ~/Library/Application Support/CodexaCoin
+    // Unix-like: ~/.codexacoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Blackmore";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "CodexaCoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -700,10 +700,10 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // macOS
-    return pathRet / "Library/Application Support/Blackmore";
+    return pathRet / "Library/Application Support/CodexaCoin";
 #else
     // Unix-like
-    return pathRet / ".blackmore";
+    return pathRet / ".codexacoin";
 #endif
 #endif
 }

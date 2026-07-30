@@ -1,43 +1,43 @@
-Blackcoin More
+CodexaCoin Core
 =====================================
-[![build](https://github.com/CoinBlack/blackcoin-more/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/CoinBlack/blackcoin-more/actions/workflows/build.yml)
+[![build](https://github.com/codexacoin/codexacoin-core/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/codexacoin/codexacoin-core/actions/workflows/build.yml)
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/CoinBlack/blackcoin-more)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/codexacoin/codexacoin-core)
 
-https://blackcoinmore.org
+https://codexacoin.example
 
-What is Blackcoin?
+What is CodexaCoin?
 ----------------
 
-Blackcoin is a decentralised digital currency with near-instant transaction speeds and negligible transaction fees built upon Proof of Stake 3.1 (PoSV3, BPoS) as introduced by the Blackcoin development team.
+CodexaCoin is a decentralised digital currency with near-instant transaction speeds and negligible transaction fees built upon Proof of Stake 3.1 (PoSV3, BPoS) as introduced by the CodexaCoin development team.
 
-What is Blackcoin More?
+What is CodexaCoin Core?
 ----------------
 
-Blackcoin More is the name of open source software which enables use of the Blackcoin protocol.
-It connects to the Blackcoin peer-to-peer network to download and fully
+CodexaCoin Core is the name of open source software which enables use of the CodexaCoin protocol.
+It connects to the CodexaCoin peer-to-peer network to download and fully
 validate blocks and transactions. It also includes a wallet and graphical user
 interface, which can be optionally built.
 
 For more information, as well as an immediately usable, binary version of
-the Blackcoin More software, see https://blackcoinmore.org.
+the CodexaCoin Core software, see https://codexacoin.example.
 
 License
 -------
 
-Blackcoin More is released under the terms of the MIT license. See [COPYING](COPYING) for more
+CodexaCoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
 information or see https://opensource.org/licenses/MIT.
 
 Development Process
 -------------------
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested. [Tags](https://github.com/CoinBlack/blackcoin-more/tags) are created
-regularly to indicate new official, stable release versions of Blackcoin More.
+The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested. [Tags](https://github.com/codexacoin/codexacoin-core/tags) are created
+regularly to indicate new official, stable release versions of CodexaCoin Core.
 
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
 
-The best place to get started is to join Blackcoin Discord: https://discord.blackcoin.nl
+The best place to get started is to join the CodexaCoin community chat: TODO — placeholder, no community server exists yet.
 
 Testing
 -------
@@ -71,7 +71,7 @@ Translations
 ------------
 
 Changes to translations as well as new translations can be submitted to
-[Blackcoin More's Transifex page](https://www.transifex.com/BlackcoinQT/BlackcoinMore/).
+[CodexaCoin Core's Transifex page](https://www.transifex.com/CodexaCoinQT/CodexaCoinMore/).
 
 Translations might be periodically pulled from Transifex and merged into the git repository. See the
 [translation process](doc/translation_process.md) for details on how this works.
@@ -89,7 +89,7 @@ The master branch gets latest updates from the stable branch.
 However, it may contain experimental features and should be used with caution.
 
 ### 26.x
-The release branch for Blackcoin More 26.x. It is intended to contain stable and functional code that has been thoroughly tested and reviewed.
+The release branch for CodexaCoin Core 26.x. It is intended to contain stable and functional code that has been thoroughly tested and reviewed.
 
 ### 28.x
-The release branch for Blackcoin More 28.x. Contains functional but highly experimental code.
+The release branch for CodexaCoin Core 28.x. Contains functional but highly experimental code.

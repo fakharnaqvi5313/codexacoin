@@ -50,7 +50,7 @@ inline void Xor(Span<std::byte> write, Span<const std::byte> key, size_t key_off
  *
  * The referenced vector will grow as necessary
  */
-// Blackcoin: Keep nType
+// CodexaCoin: Keep nType
 class VectorWriter
 {
  public:
@@ -494,7 +494,7 @@ public:
     }
 };
 
-// Blackcoin: Keep nType
+// CodexaCoin: Keep nType
 class CAutoFile : public AutoFile
 {
 private:
@@ -526,7 +526,7 @@ public:
  *  Will automatically close the file when it goes out of scope if not null.
  *  If you need to close the file early, use file.fclose() instead of fclose(file).
  */
-// Blackcoin: Keep nType
+// CodexaCoin: Keep nType
 class BufferedFile
 {
 private:

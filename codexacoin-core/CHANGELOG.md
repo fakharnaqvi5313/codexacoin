@@ -25,7 +25,7 @@
 - Enabled V2 P2P transport by default (backport of Core's PR29347 and 29058)
 - Enabled `checkkernel` RPC call
 - Only delete the PID file if we created it (backport of Core's PR28946)
-- Set minimum UTXO value to be used for staking to 0.1 BLK (can be overridden with `-minstakingamount` parameter)
+- Set minimum UTXO value to be used for staking to 0.1 CAC (can be overridden with `-minstakingamount` parameter)
 
 ## v26.0.0-beta-1 (2024-02-12)
 - Updated to Bitcoin Core 26.0
@@ -81,7 +81,7 @@
 ## v13.2.0 (2022-11-24)
 - Changed versioning (backport of Core's PR20223)
 - Testnet hard fork: Removed transaction timestamp
-- Testnet hard fork: Increased transaction fees and set minimum transaction fee of 0.001 BLK
+- Testnet hard fork: Increased transaction fees and set minimum transaction fee of 0.001 CAC
 - Testnet hard fork: Enabled relative timelocks (OP_CHECKSEQUENCEVERIFY, BIP62, 112 and 113)
 - Enabled compact block relay protocol (BIP152)
 - Added an option to donate the specified percentage of staking rewards to the dev fund (20% by default)
@@ -120,7 +120,7 @@
 ## v2.13.2.6 (2020-07-21)
 - Fix staking memory leak (by JJ12880 from Radium Core)
 - Updated fixed seeds
-- Added secondary Blackcoin DNS seeder
+- Added secondary CodexaCoin DNS seeder
 
 ## v2.13.2.5 (2020-04-28)
 - Updated Berkeley DB to 6.2.38
@@ -167,7 +167,7 @@
 - Proof-of-stake related code optimized and refactored
 
 ## v2.12.1.1 (2018-10-01)
-- Rebranded to Blackcoin More
+- Rebranded to CodexaCoin Core
 - Some small fixes and updates from Bitcoin Core 0.13.x branch
 - Added "Use available balance" button in send coins dialog (backport of Core's PR11316)
 - Added a button to open the config file in a text editor (backport of Core's PR9890)

@@ -322,7 +322,7 @@ public:
 
     int64_t GetMedianTimePast() const
     {
-        // Blackcoin: use GetBlockTime() since ProtocolV2
+        // CodexaCoin: use GetBlockTime() since ProtocolV2
         if (Params().GetConsensus().IsProtocolV2(GetBlockTime()))
             return GetBlockTime();
         else {

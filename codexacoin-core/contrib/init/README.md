@@ -1,11 +1,11 @@
 Sample configuration files for:
 ```
-systemd: blackmored.service
-Upstart: blackmored.conf
-OpenRC:  blackmored.openrc
-         blackmored.openrcconf
-CentOS:  blackmored.init
-macOS:   org.blackcoin.blackmored.plist
+systemd: codexacoind.service
+Upstart: codexacoind.conf
+OpenRC:  codexacoind.openrc
+         codexacoind.openrcconf
+CentOS:  codexacoind.init
+macOS:   org.codexacoin.codexacoind.plist
 ```
 have been made available to assist packagers in creating node packages here.
 

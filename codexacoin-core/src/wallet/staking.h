@@ -5,8 +5,8 @@
 // Staking start/stop algos by Qtum
 // Copyright (c) 2016-2023 The Qtum developers
 
-#ifndef BLACKCOIN_WALLET_STAKE_H
-#define BLACKCOIN_WALLET_STAKE_H
+#ifndef CODEXACOIN_WALLET_STAKE_H
+#define CODEXACOIN_WALLET_STAKE_H
 
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
@@ -28,4 +28,4 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
 
 } // namespace wallet
 
-#endif // BLACKCOIN_WALLET_STAKE_H
+#endif // CODEXACOIN_WALLET_STAKE_H

@@ -151,34 +151,34 @@ dist/
 
 /ci/scratch/
 
-# Blackcoin specifics
+# CodexaCoin specifics
 
 #binaries
-src/blackmore
-src/blackmored
-src/blackmore-cli
-src/blackmore-gui
-src/blackmore-node
-src/blackmore-tx
-src/blackmore-util
-src/blackmore-chainstate
-src/blackmore-wallet
-src/test/test_blackmore
-src/qt/test/test_blackmore-qt
+src/codexacoin
+src/codexacoind
+src/codexacoin-cli
+src/codexacoin-gui
+src/codexacoin-node
+src/codexacoin-tx
+src/codexacoin-util
+src/codexacoin-chainstate
+src/codexacoin-wallet
+src/test/test_codexacoin
+src/qt/test/test_codexacoin-qt
 
 # autoreconf
-src/qt/blackmore-qt.config
-src/qt/blackmore-qt.creator
-src/qt/blackmore-qt.creator.user
-src/qt/blackmore-qt.files
-src/qt/blackmore-qt.includes
+src/qt/codexacoin-qt.config
+src/qt/codexacoin-qt.creator
+src/qt/codexacoin-qt.creator.user
+src/qt/codexacoin-qt.files
+src/qt/codexacoin-qt.includes
 
 # Compilation and Qt preprocessor part
-src/qt/blackmore-qt
-Blackmore-Qt.app
+src/qt/codexacoin-qt
+CodexaCoin-Qt.app
 
 # Unit-tests
-blackmore-qt_test
+codexacoin-qt_test
 
 # Output from running db62 installation
 db62/

@@ -174,7 +174,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
                          strprintf("%s: inputs missing/spent", __func__));
     }
 
-    // Blackcoin: in v2 transactions use GetAdjustedTime() as nTimeTx
+    // CodexaCoin: in v2 transactions use GetAdjustedTime() as nTimeTx
     int64_t nTimeTx = tx.nTime;
     if (!nTimeTx && tx.nVersion >= 2)
         nTimeTx = GetAdjustedTimeSeconds();
@@ -216,7 +216,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-outofrange");
         }
 
-        // Blackcoin: Minimum fee check
+        // CodexaCoin: Minimum fee check
         if (::Params().GetConsensus().IsProtocolV3_1(nTimeTx) && txfee_aux < GetMinFee(tx, nTimeTx))
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-not-enough");
 
@@ -226,7 +226,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
     return true;
 }
 
-// Blackcoin: GetMinFee
+// CodexaCoin: GetMinFee
 CAmount GetMinFee(const CTransaction& tx, uint32_t nTimeTx)
 {
     size_t nBytes = GetVirtualTransactionSize(tx);

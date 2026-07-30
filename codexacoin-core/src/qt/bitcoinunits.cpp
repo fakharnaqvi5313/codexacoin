@@ -31,7 +31,7 @@ QList<BitcoinUnit> BitcoinUnits::availableUnits()
 QString BitcoinUnits::longName(Unit unit)
 {
     switch (unit) {
-    case Unit::BTC: return QString("BLK");
+    case Unit::BTC: return QString("CAC");
     case Unit::mBTC: return QString("mBLK");
     case Unit::uBTC: return QString::fromUtf8("μBLK (blits)");
     case Unit::SAT: return QString("Satoshi (sat)");
@@ -53,9 +53,9 @@ QString BitcoinUnits::shortName(Unit unit)
 QString BitcoinUnits::description(Unit unit)
 {
     switch (unit) {
-    case Unit::BTC: return QString("Blackcoins");
-    case Unit::mBTC: return QString("Milli-Blackcoins (1 / 1" THIN_SP_UTF8 "000)");
-    case Unit::uBTC: return QString("Micro-Blackcoins (blits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case Unit::BTC: return QString("CodexaCoins");
+    case Unit::mBTC: return QString("Milli-CodexaCoins (1 / 1" THIN_SP_UTF8 "000)");
+    case Unit::uBTC: return QString("Micro-CodexaCoins (blits) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     case Unit::SAT: return QString("Satoshi (sat) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
     } // no default case, so the compiler can warn about missing cases
     assert(false);

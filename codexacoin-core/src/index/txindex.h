@@ -23,7 +23,7 @@ private:
     const std::unique_ptr<DB> m_db;
 
     /*
-    // Blackcoin
+    // CodexaCoin
     bool AllowPrune() const override { return false; }
     */
 

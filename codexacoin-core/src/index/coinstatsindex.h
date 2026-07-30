@@ -40,7 +40,7 @@ private:
     [[nodiscard]] bool ReverseBlock(const CBlock& block, const CBlockIndex* pindex);
 
     /*
-    // Blackcoin
+    // CodexaCoin
     bool AllowPrune() const override { return true; }
     */
 

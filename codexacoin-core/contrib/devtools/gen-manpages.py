@@ -8,12 +8,12 @@ import sys
 import tempfile
 
 BINARIES = [
-'src/blackmored',
-'src/blackmore-cli',
-'src/blackmore-tx',
-'src/blackmore-wallet',
-'src/blackmore-util',
-'src/qt/blackmore-qt',
+'src/codexacoind',
+'src/codexacoin-cli',
+'src/codexacoin-tx',
+'src/codexacoin-wallet',
+'src/codexacoin-util',
+'src/qt/codexacoin-qt',
 ]
 
 # Paths to external utilities.

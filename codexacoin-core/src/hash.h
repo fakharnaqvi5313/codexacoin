@@ -146,7 +146,7 @@ public:
     }
 };
 
-// Blackcoin: Keep nType
+// CodexaCoin: Keep nType
 class CHashWriter : public HashWriter
 {
 private:

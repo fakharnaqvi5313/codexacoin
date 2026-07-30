@@ -14,14 +14,14 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
-            VALUE "CompanyName",        "Blackcoin"
-            VALUE "FileDescription",    "blackmore-util (CLI Blackcoin utility)"
+            VALUE "CompanyName",        "CodexaCoin"
+            VALUE "FileDescription",    "codexacoin-util (CLI CodexaCoin utility)"
             VALUE "FileVersion",        PACKAGE_VERSION
-            VALUE "InternalName",       "blackmore-util"
+            VALUE "InternalName",       "codexacoin-util"
             VALUE "LegalCopyright",     COPYRIGHT_STR
             VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
-            VALUE "OriginalFilename",   "blackmore-util.exe"
-            VALUE "ProductName",        "blackmore-util"
+            VALUE "OriginalFilename",   "codexacoin-util.exe"
+            VALUE "ProductName",        "codexacoin-util"
             VALUE "ProductVersion",     PACKAGE_VERSION
         END
     END

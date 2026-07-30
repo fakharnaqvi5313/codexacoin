@@ -34,16 +34,16 @@
   <string>????</string>
 
   <key>CFBundleExecutable</key>
-  <string>Blackmore-Qt</string>
+  <string>CodexaCoin-Qt</string>
 
   <key>CFBundleName</key>
-  <string>Blackmore-Qt</string>
+  <string>CodexaCoin-Qt</string>
 
   <key>LSHasLocalizedDisplayName</key>
   <true/>
 
   <key>CFBundleIdentifier</key>
-  <string>org.blackcoin.Blackmore-Qt</string>
+  <string>org.codexacoin.CodexaCoin-Qt</string>
 
   <key>CFBundleURLTypes</key>
   <array>
@@ -51,7 +51,7 @@
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
       <key>CFBundleURLName</key>
-      <string>org.blackcoin.BlackcoinPayment</string>
+      <string>org.codexacoin.CodexaCoinPayment</string>
       <key>CFBundleURLSchemes</key>
       <array>
         <string>bitcoin</string>

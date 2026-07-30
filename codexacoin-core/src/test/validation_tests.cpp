@@ -21,7 +21,7 @@
 
 BOOST_FIXTURE_TEST_SUITE(validation_tests, TestingSetup)
 
-// Blackcoin
+// CodexaCoin
 /*
 static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
 {

@@ -323,7 +323,7 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
     info.pushKV("spentby", spent);
 
     /*
-    // Blackcoin
+    // CodexaCoin
     // Add opt-in RBF status
     bool rbfStatus = false;
     RBFTransactionState rbfState = IsRBFOptIn(tx, pool);

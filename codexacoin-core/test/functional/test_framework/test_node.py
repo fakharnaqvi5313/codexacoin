@@ -2,7 +2,7 @@
 # Copyright (c) 2017-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Class for blackmored node under test"""
+"""Class for codexacoind node under test"""
 
 import contextlib
 import decimal
@@ -54,7 +54,7 @@ class ErrorMatch(Enum):
 
 
 class TestNode():
-    """A class for representing a blackmored node under test.
+    """A class for representing a codexacoind node under test.
 
     This class contains:
 
@@ -77,7 +77,7 @@ class TestNode():
         self.index = i
         self.p2p_conn_index = 1
         self.datadir_path = datadir_path
-        self.bitcoinconf = self.datadir_path / "blackmore.conf"
+        self.bitcoinconf = self.datadir_path / "codexacoin.conf"
         self.stdout_dir = self.datadir_path / "stdout"
         self.stderr_dir = self.datadir_path / "stderr"
         self.chain = chain
@@ -94,8 +94,8 @@ class TestNode():
         # Note that common args are set in the config file (see initialize_datadir)
         self.extra_args = extra_args
         self.version = version
-        # Configuration for logging is set as command-line args rather than in the blackmore.conf file.
-        # This means that starting a blackmored using the temp dir to debug a failed test won't
+        # Configuration for logging is set as command-line args rather than in the codexacoin.conf file.
+        # This means that starting a codexacoind using the temp dir to debug a failed test won't
         # spam debug.log.
         self.args = [
             self.binary,
@@ -189,7 +189,7 @@ class TestNode():
         raise AssertionError(self._node_msg(msg))
 
     def __del__(self):
-        # Ensure that we don't leave any blackmored processes lying around after
+        # Ensure that we don't leave any codexacoind processes lying around after
         # the test ends
         if self.process and self.cleanup_on_exit:
             # Should only happen on test failure
@@ -213,7 +213,7 @@ class TestNode():
 
         self.use_v2transport = "-v2transport=1" in extra_args or (self.default_to_v2 and "-v2transport=0" not in extra_args)
 
-        # Add a new stdout and stderr file each time blackmored is started
+        # Add a new stdout and stderr file each time codexacoind is started
         if stderr is None:
             stderr = tempfile.NamedTemporaryFile(dir=self.stderr_dir, delete=False)
         if stdout is None:
@@ -225,7 +225,7 @@ class TestNode():
             cwd = self.cwd
 
         # Delete any existing cookie file -- if such a file exists (eg due to
-        # unclean shutdown), it will get overwritten anyway by blackmored, and
+        # unclean shutdown), it will get overwritten anyway by codexacoind, and
         # potentially interfere with our attempt to authenticate
         delete_cookie_file(self.datadir_path, self.chain)
 
@@ -237,13 +237,13 @@ class TestNode():
         self.process = subprocess.Popen(self.args + extra_args, env=subp_env, stdout=stdout, stderr=stderr, cwd=cwd, **kwargs)
 
         self.running = True
-        self.log.debug("blackmored started, waiting for RPC to come up")
+        self.log.debug("codexacoind started, waiting for RPC to come up")
 
         if self.start_perf:
             self._start_perf()
 
     def wait_for_rpc_connection(self):
-        """Sets up an RPC connection to the blackmored process. Returns False if unable to connect."""
+        """Sets up an RPC connection to the codexacoind process. Returns False if unable to connect."""
         # Poll at a rate of four times per second
         poll_per_s = 4
         for _ in range(poll_per_s * self.rpc_timeout):
@@ -254,7 +254,7 @@ class TestNode():
                 str_error += "************************\n" if str_error else ''
 
                 raise FailedToStartError(self._node_msg(
-                    f'blackmored exited with status {self.process.returncode} during initialization. {str_error}'))
+                    f'codexacoind exited with status {self.process.returncode} during initialization. {str_error}'))
             try:
                 rpc = get_rpc_proxy(
                     rpc_url(self.datadir_path, self.index, self.chain, self.rpchost),
@@ -308,11 +308,11 @@ class TestNode():
                     pass  # Port not yet open?
                 else:
                     raise  # unknown OS error
-            except ValueError as e:  # cookie file not found and no rpcuser or rpcpassword; blackmored is still starting
+            except ValueError as e:  # cookie file not found and no rpcuser or rpcpassword; codexacoind is still starting
                 if "No RPC credentials" not in str(e):
                     raise
             time.sleep(1.0 / poll_per_s)
-        self._raise_assertion_error("Unable to connect to blackmored after {}s".format(self.rpc_timeout))
+        self._raise_assertion_error("Unable to connect to codexacoind after {}s".format(self.rpc_timeout))
 
     def wait_for_cookie_credentials(self):
         """Ensures auth cookie credentials can be read, e.g. for testing CLI with -rpcwait before RPC connection is up."""
@@ -324,7 +324,7 @@ class TestNode():
                 get_auth_cookie(self.datadir_path, self.chain)
                 self.log.debug("Cookie credentials successfully retrieved")
                 return
-            except ValueError:  # cookie file not found and no rpcuser or rpcpassword; blackmored is still starting
+            except ValueError:  # cookie file not found and no rpcuser or rpcpassword; codexacoind is still starting
                 pass            # so we continue polling until RPC credentials are retrieved
             time.sleep(1.0 / poll_per_s)
         self._raise_assertion_error("Unable to retrieve cookie credentials after {}s".format(self.rpc_timeout))
@@ -566,7 +566,7 @@ class TestNode():
 
         if not test_success('readelf -S {} | grep .debug_str'.format(shlex.quote(self.binary))):
             self.log.warning(
-                "perf output won't be very useful without debug symbols compiled into blackmored")
+                "perf output won't be very useful without debug symbols compiled into codexacoind")
 
         output_path = tempfile.NamedTemporaryFile(
             dir=self.datadir_path,
@@ -607,18 +607,18 @@ class TestNode():
     def assert_start_raises_init_error(self, extra_args=None, expected_msg=None, match=ErrorMatch.FULL_TEXT, *args, **kwargs):
         """Attempt to start the node and expect it to raise an error.
 
-        extra_args: extra arguments to pass through to blackmored
-        expected_msg: regex that stderr should match when blackmored fails
+        extra_args: extra arguments to pass through to codexacoind
+        expected_msg: regex that stderr should match when codexacoind fails
 
-        Will throw if blackmored starts without an error.
-        Will throw if an expected_msg is provided and it does not match blackmored's stdout."""
+        Will throw if codexacoind starts without an error.
+        Will throw if an expected_msg is provided and it does not match codexacoind's stdout."""
         assert not self.running
         with tempfile.NamedTemporaryFile(dir=self.stderr_dir, delete=False) as log_stderr, \
              tempfile.NamedTemporaryFile(dir=self.stdout_dir, delete=False) as log_stdout:
             try:
                 self.start(extra_args, stdout=log_stdout, stderr=log_stderr, *args, **kwargs)
                 ret = self.process.wait(timeout=self.rpc_timeout)
-                self.log.debug(self._node_msg(f'blackmored exited with status {ret} during initialization'))
+                self.log.debug(self._node_msg(f'codexacoind exited with status {ret} during initialization'))
                 assert ret != 0  # Exit code must indicate failure
                 self.running = False
                 self.process = None
@@ -642,7 +642,7 @@ class TestNode():
                 self.process.kill()
                 self.running = False
                 self.process = None
-                assert_msg = f'blackmored should have exited within {self.rpc_timeout}s '
+                assert_msg = f'codexacoind should have exited within {self.rpc_timeout}s '
                 if expected_msg is None:
                     assert_msg += "with an error"
                 else:
