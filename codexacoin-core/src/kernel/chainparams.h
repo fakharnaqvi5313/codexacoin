@@ -180,4 +180,12 @@ protected:
     std::vector<std::string> vDevFundAddress;
 };
 
+/**
+ * CodexaCoin: brute-force nNonce for a genesis block satisfying nBits, using
+ * the same coinbase/timestamp construction every network's genesis already
+ * uses (see kernel/chainparams.cpp). Used by contrib/genesis tooling to
+ * (re)generate genesis nTime/nNonce/hash when network parameters change.
+ */
+CBlock FindGenesisBlock(uint32_t nTime, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward, uint32_t& nNonceOut);
+
 #endif // BITCOIN_KERNEL_CHAINPARAMS_H

@@ -5,6 +5,7 @@
 
 #include <kernel/chainparams.h>
 
+#include <arith_uint256.h>
 #include <chainparamsseeds.h>
 #include <consensus/amount.h>
 #include <consensus/merkle.h>
@@ -24,6 +25,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <type_traits>
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
@@ -72,9 +75,43 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  */
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "20 Feb 2014 Bitcoin ATMs come to USA";
+    // CodexaCoin genesis timestamp phrase: a verifiable, dated financial-news
+    // headline (mirrors Bitcoin's own "Chancellor on brink of second bailout
+    // for banks" convention). Kept short and quoted in full (not truncated)
+    // to fit the 100-byte coinbase scriptSig consensus limit. See
+    // PARAMETERS.md section 8 for the source.
+    const char* pszTimestamp = "CNBC 29/Jul/2026 Fed meeting recap: July 2026";
     const CScript genesisOutputScript = CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f") << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+}
+
+/**
+ * CodexaCoin: brute-force nNonce for a genesis block satisfying nBits, reusing
+ * the exact same CreateGenesisBlock() (same pszTimestamp, same output script)
+ * every CChainParams subclass in this file already calls -- so there is no
+ * separate reimplementation of the header/coinbase serialization to get
+ * subtly wrong. Used by contrib tooling (see PARAMETERS.md section 8/9) to
+ * regenerate genesis nTime/nNonce/hash whenever network params change.
+ */
+CBlock FindGenesisBlock(uint32_t nTime, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward, uint32_t& nNonceOut)
+{
+    arith_uint256 bnTarget;
+    bnTarget.SetCompact(nBits);
+    for (uint32_t nonce = 0;; ++nonce) {
+        CBlock block = CreateGenesisBlock(nTime, nonce, nBits, nVersion, genesisReward);
+        // CodexaCoin/Blackcoin: proof-of-work is checked against
+        // GetPoWHash() (scrypt), not GetHash() (SHA256d, and only for
+        // nVersion > 6 at that -- see primitives/block.cpp). ConnectBlock's
+        // CheckBlockHeader() calls CheckProofOfWork(block.GetPoWHash(), ...)
+        // unconditionally, regardless of block version.
+        if (UintToArith256(block.GetPoWHash()) <= bnTarget) {
+            nNonceOut = nonce;
+            return block;
+        }
+        if (nonce == std::numeric_limits<uint32_t>::max()) {
+            throw std::runtime_error("FindGenesisBlock: exhausted nNonce range without finding a valid hash; try a different nTime");
+        }
+    }
 }
 
 /**
@@ -87,15 +124,15 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nMaxReorganizationDepth = 500;
-        consensus.CSVHeight = 4908715;
-        consensus.SegwitHeight = std::numeric_limits<int>::max(); // std::numeric_limits<int>::max()
-        consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // segwit activation height + miner confirmation window
+        consensus.CSVHeight = 0; // CodexaCoin: fresh chain, active from genesis (no legacy history to preserve)
+        consensus.SegwitHeight = 0; // CodexaCoin: fresh chain, active from genesis
+        consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.posLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.posLimitV2 = uint256S("000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nTargetTimespan = 16 * 60; // 16 mins
         consensus.nTargetSpacingV1 = 60;
-        consensus.nTargetSpacing = 64;
+        consensus.nTargetSpacing = 64; // CodexaCoin: unchanged from Blackcoin default (PARAMETERS.md)
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.fPoSNoRetargeting = false;
@@ -107,8 +144,11 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
         // Deployment of SegWit (BIP141, BIP143, and BIP147)
+        // CodexaCoin: fresh chain, SegWit active from genesis (SegwitHeight = 0 above);
+        // this deployment entry is unused for buried deployments but left NEVER_ACTIVE
+        // for cleanliness/consistency with the other version-bits slots.
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].bit = 1;
-        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 1750377600; // Friday, June 20, 2025 12:00:00 AM
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].min_activation_height = 0; // No activation delay
 
@@ -122,63 +162,77 @@ public:
         consensus.nProtocolV2Time = 1407053625;
         consensus.nProtocolV3Time = 1444028400;
         consensus.nProtocolV3_1Time = 1713938400;
-        consensus.nLastPOWBlock = 10000;
+        consensus.nLastPOWBlock = 500; // CodexaCoin: founder premine window, see PARAMETERS.md section 5
         consensus.nStakeTimestampMask = 0xf; // 15
         consensus.nCoinbaseMaturity = 500;
 
-        consensus.nMinimumChainWork = uint256S("0x000000000000000000000000000000000000000000000461191ade0b134e4e08"); // block 5214838
-        consensus.defaultAssumeValid = uint256S("0x19c385f36869c5b57e17b186414e0dc5d7fa71f24ec3084d03b7736b45e5a3e4"); // block 5214838
+        // CodexaCoin: 14,000,000,000 CAC premine, split evenly across the
+        // 500-block PoW window above (28,000,000 CAC/block, exact, no
+        // remainder). See PARAMETERS.md section 5.
+        consensus.nPremineTotal = CAmount{14000000000} * COIN;
+        // CodexaCoin: coin-age-proportional staking reward (PARAMETERS.md
+        // section 6 / spec Appendix A). 1368 bp = 13.68%/yr = 1.14%/mo,
+        // uncalibrated default pending the regtest maturity-drag test.
+        consensus.nStakeRewardAnnualBP = 1368;
+        consensus.nStakeRewardAgeCapSeconds = 60 * 24 * 60 * 60; // 60 days
+
+        // CodexaCoin: fresh chain, zeroed pending real chain work (PARAMETERS.md
+        // instruction: "Zero out chainTxData and nMinimumChainWork appropriately
+        // for a new chain").
+        consensus.nMinimumChainWork = uint256{};
+        consensus.defaultAssumeValid = uint256{};
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
          * a large 32-bit integer with any alignment.
          */
-        pchMessageStart[0] = 0x70;
-        pchMessageStart[1] = 0x35;
-        pchMessageStart[2] = 0x22;
-        pchMessageStart[3] = 0x05;
-        nDefaultPort = 15714;
-        m_assumed_blockchain_size = 20;
+        pchMessageStart[0] = 0x74;
+        pchMessageStart[1] = 0x80;
+        pchMessageStart[2] = 0x2a;
+        pchMessageStart[3] = 0xa6;
+        nDefaultPort = 16210;
+        m_assumed_blockchain_size = 1;
 
-        genesis = CreateGenesisBlock(1393221600, 164482, 0x1e0fffff, 1, 0);
+        // CodexaCoin: genesis mined by contrib/genesis/generate_genesis.cpp
+        // (see PARAMETERS.md section 8). nNonce found by brute force against
+        // GetPoWHash() (scrypt), not GetHash().
+        genesis = CreateGenesisBlock(1785326400, 2473299, 0x1e0fffff, 7, 0);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x000001faef25dec4fbcf906e6242621df2c183bf232f263d0ba5b101911e4563"));
-        assert(genesis.hashMerkleRoot == uint256S("0x12630d16a97f24b287c8c2594dda5fb98c9e6c70fc61d44191931ea2aa08dc90"));
+        assert(consensus.hashGenesisBlock == uint256S("0xecf4dfc81beeb2a992ee169e1fc349144e48108d7a03f7fb6d619c2bd845038e"));
+        assert(genesis.hashMerkleRoot == uint256S("0x089c9664d716a35a805093b15b0dd6e9f58e84ca21a176c2783a377d23ef6b22"));
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
         // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        vSeeds.emplace_back("dnsseed.codexacoin.nl"); // hosted by codexacoin.nl
-        vSeeds.emplace_back("dnsseed2.codexacoin.nl"); // hosted by codexacoin.nl
-        vSeeds.emplace_back("electrum2.codexacoin.nl"); // hosted by codexacoin.nl
-        vSeeds.emplace_back("electrum3.codexacoin.nl");  // hosted by codexacoin.nl
+        // CodexaCoin: TODO placeholders -- no real seed infrastructure exists
+        // yet. See PARAMETERS.md section 9 / Phase 2 deliverables.
+        vSeeds.emplace_back("seed1.codexacoin.example"); // TODO: stand up real seed node
+        vSeeds.emplace_back("seed2.codexacoin.example"); // TODO: stand up real seed node
 
-        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,25);
-        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,85);
-        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,153);
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,28);
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,63);
+        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,156);
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 
-        bech32_hrp = "blk";
+        bech32_hrp = "cac";
 
-        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
+        // CodexaCoin: no fixed-seed IP list exists yet for a chain that
+        // hasn't launched. Empty until Phase 2/7 seed infrastructure is live.
+        vFixedSeeds.clear();
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
+        // CodexaCoin: fresh chain -- checkpoints reset to genesis only, per
+        // PARAMETERS.md instruction. The 500-block premine window's hashes
+        // get appended here once mined (PARAMETERS.md section 9 TODO #2).
         checkpointData = {
             {
-                {   5001, uint256S("0x2fac9021be0c311e7b6dc0933a72047c70f817e2eb1e01bede011193ad1b28bc")}, // hardfork
-                {  10000, uint256S("0x0000000000827e4dc601f7310a91c45af8df0dfc1b6fa1dfa5b896cb00c8767c")}, // last pow block
-                {  38425, uint256S("0x62bf2e9701226d2f88d9fa99d650bd81f3faf2e56f305b7d71ccd1e7aa9c3075")}, // hardfork
-                { 254348, uint256S("0x9bf8d9bd757d3ef23d5906d70567e5f0da93f1e0376588c8d421a95e2421838b")}, // minor network split
-                { 319002, uint256S("0x0011494d03b2cdf1ecfc8b0818f1e0ef7ee1d9e9b3d1279c10d35456bc3899ef")}, // hardfork
-                { 872456, uint256S("0xe4fd321ced1de06213d2e246b150b4bfd8c4aa0989965dce88f2a58668c64860")}, // hardfork
-                {4232630, uint256S("0xae0c2a9bd13746e2887ca57bf1046b3c787a5ed1068fd1633a3575f08ee291fc")}, // Devfund
-                {4908715, uint256S("0x6f8e37e21aa2fba3f8e2d6825cb825ca290e9367ed08b8c30943bc16efcba119")}, // hardfork
+                {0, consensus.hashGenesisBlock},
             }
         };
 
@@ -187,14 +241,16 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 40500 19c385f36869c5b57e17b186414e0dc5d7fa71f24ec3084d03b7736b45e5a3e4
-            .nTime    = 1734468656,
-            .nTxCount = 15786440,
-            .dTxRate  = 0.02988878182907771,
+            // CodexaCoin: zeroed, no real chain exists yet (PARAMETERS.md instruction)
+            .nTime    = 0,
+            .nTxCount = 0,
+            .dTxRate  = 0,
         };
 
-        // A vector of p2sh addresses
-        vDevFundAddress = { "BKDvboD1CzZ5KycP1FRSXRoi7XXhHoQhS1" };
+        // CodexaCoin: no dev fund address generated yet -- TODO before
+        // mainnet launch. Left empty (dev fund donation feature stays
+        // disabled by default; see wallet/staking.cpp isDevFundEnabled).
+        vDevFundAddress = {};
     }
 };
 
@@ -208,9 +264,9 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nMaxReorganizationDepth = 500;
-        consensus.CSVHeight = 1320664;
-        consensus.SegwitHeight = std::numeric_limits<int>::max(); // std::numeric_limits<int>::max()
-        consensus.MinBIP9WarningHeight = std::numeric_limits<int>::max(); // segwit activation height + miner confirmation window
+        consensus.CSVHeight = 0; // CodexaCoin: fresh chain, active from genesis
+        consensus.SegwitHeight = 0; // CodexaCoin: fresh chain, active from genesis
+        consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.posLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.posLimitV2 = uint256S("000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffff");
@@ -229,7 +285,7 @@ public:
 
         // Deployment of SegWit (BIP141, BIP143, and BIP147)
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].bit = 1;
-        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 1727100000; // Monday, September 23, 2024 2:00:00 PM
+        consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].min_activation_height = 0; // No activation delay
 
@@ -243,34 +299,38 @@ public:
         consensus.nProtocolV2Time = 1407053625;
         consensus.nProtocolV3Time = 1444028400;
         consensus.nProtocolV3_1Time = 1667779200;
-        consensus.nLastPOWBlock = 0x7fffffff;
+        consensus.nLastPOWBlock = 500; // CodexaCoin: founder premine window (mirrors mainnet), see PARAMETERS.md section 5
         consensus.nStakeTimestampMask = 0xf;
-        consensus.nCoinbaseMaturity = 10;
+        consensus.nCoinbaseMaturity = 10; // Fast maturity for testing; window (500) stays >= this, so no staking-eligibility gap (see PARAMETERS.md section 5.2)
 
-        consensus.nMinimumChainWork = uint256S("0x00000000000000000000000000000000000000000000005e076ec35dd78945ce"); // block 2139564
-        consensus.defaultAssumeValid = uint256S("0xade1c1bd7d6b75cd95b5ec841ffaff24f79ab71c084a3fe8374c2680c72f6b4e"); // block 2139564
+        consensus.nPremineTotal = CAmount{14000000000} * COIN; // CodexaCoin: mirrors mainnet for test parity; testnet coins are worthless
+        consensus.nStakeRewardAnnualBP = 1368;
+        consensus.nStakeRewardAgeCapSeconds = 60 * 24 * 60 * 60; // 60 days
 
-        pchMessageStart[0] = 0xcd;
-        pchMessageStart[1] = 0xf2;
-        pchMessageStart[2] = 0xc0;
-        pchMessageStart[3] = 0xef;
-        nDefaultPort = 25714;
-        m_assumed_blockchain_size = 5;
+        consensus.nMinimumChainWork = uint256{};
+        consensus.defaultAssumeValid = uint256{};
 
-        genesis = CreateGenesisBlock(1393221600, 216178, 0x1f00ffff, 1, 0);
+        pchMessageStart[0] = 0xc1;
+        pchMessageStart[1] = 0x02;
+        pchMessageStart[2] = 0x7e;
+        pchMessageStart[3] = 0x3b;
+        nDefaultPort = 26210;
+        m_assumed_blockchain_size = 1;
+
+        // CodexaCoin: genesis mined by contrib/genesis/generate_genesis.cpp.
+        genesis = CreateGenesisBlock(1785326400, 73100, 0x1f00ffff, 7, 0);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x0000724595fb3b9609d441cbfb9577615c292abf07d996d3edabc48de843642d"));
-        assert(genesis.hashMerkleRoot == uint256S("0x12630d16a97f24b287c8c2594dda5fb98c9e6c70fc61d44191931ea2aa08dc90"));
+        assert(consensus.hashGenesisBlock == uint256S("0x719ff8d5c4773340ff014d12c0bbc623aa6fc2abc2b4ecd6dc7e93ef4f609b95"));
+        assert(genesis.hashMerkleRoot == uint256S("0x089c9664d716a35a805093b15b0dd6e9f58e84ca21a176c2783a377d23ef6b22"));
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
         // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        vSeeds.emplace_back("electrum2.codexacoin.nl"); // hosted by codexacoin.nl
-        vSeeds.emplace_back("electrum3.codexacoin.nl");  // hosted by codexacoin.nl
-        vSeeds.emplace_back("dnsseed.codexacoin.nl"); // hosted by codexacoin.nl
-        vSeeds.emplace_back("dnsseed2.codexacoin.nl"); // hosted by codexacoin.nl
+        // CodexaCoin: TODO placeholders -- see PARAMETERS.md section 9 / Phase 2.
+        vSeeds.emplace_back("testnet-seed1.codexacoin.example"); // TODO: stand up real testnet seed node
+        vSeeds.emplace_back("testnet-seed2.codexacoin.example"); // TODO: stand up real testnet seed node
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
@@ -278,19 +338,18 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
-        bech32_hrp = "tblk";
+        bech32_hrp = "tcac";
 
-        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
+        // CodexaCoin: no fixed-seed IP list exists yet.
+        vFixedSeeds.clear();
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
+        // CodexaCoin: fresh chain -- checkpoints reset to genesis only.
         checkpointData = {
             {
-                {  90235, uint256S("0x567898e79184dc2f7dc3a661f794f28566e4b856d70180914f7371b1b3cc82d8")}, // initial checkpoint
-                {1320664, uint256S("0x64fa6a5414c6797629d34ef150c46486a5e1d49d2bceb87d6da14a501f838afd")}, // hardfork
-                {1415393, uint256S("0x5d5c42500cc6057533e249ba9eeb9b5e998aff30468c904bc267ec9bccbc8b39")}, // start devfund
-                {2070000, uint256S("0xf8e2c3919353487f73cd957f29654dc00a3b0c99a9fbf38a3514cdead626f0ec")}, // segwit activated
+                {0, consensus.hashGenesisBlock},
             }
         };
 
@@ -299,14 +358,14 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 40500 ade1c1bd7d6b75cd95b5ec841ffaff24f79ab71c084a3fe8374c2680c72f6b4e
-            .nTime    = 1734469040,
-            .nTxCount = 4298002,
-            .dTxRate  = 0.02974604428985235,
+            // CodexaCoin: zeroed, no real chain exists yet
+            .nTime    = 0,
+            .nTxCount = 0,
+            .dTxRate  = 0,
         };
 
-        // A vector of p2sh addresses
-        vDevFundAddress = { "n14L5xqAs7QRzNiTLPNaPeqaF9CRoxzVnU" };
+        // CodexaCoin: no dev fund address generated yet -- TODO before testnet launch.
+        vDevFundAddress = {};
     }
 };
 
@@ -392,9 +451,13 @@ public:
         consensus.nProtocolV2Time = 1707168542;
         consensus.nProtocolV3Time = 1707168543;
         consensus.nProtocolV3_1Time = 1707168544;
-        consensus.nLastPOWBlock = 0x7fffffff;
+        consensus.nLastPOWBlock = 0x7fffffff; // CodexaCoin: no premine window on signet
         consensus.nStakeTimestampMask = 0xf;
         consensus.nCoinbaseMaturity = 10;
+
+        consensus.nPremineTotal = 0;
+        consensus.nStakeRewardAnnualBP = 1368;
+        consensus.nStakeRewardAgeCapSeconds = 60 * 24 * 60 * 60; // 60 days
 
         // message start is defined as the first 4 bytes of the sha256d of the block script
         HashWriter h{};
@@ -402,12 +465,16 @@ public:
         uint256 hash = h.GetHash();
         std::copy_n(hash.begin(), 4, pchMessageStart.begin());
 
-        nDefaultPort = 45714;
+        nDefaultPort = 46210;
 
-        genesis = CreateGenesisBlock(1393221600, 216178, 0x1f00ffff, 1, 0);
+        // CodexaCoin: genesis mined by contrib/genesis/generate_genesis.cpp.
+        // Same (nTime, nBits) as testnet by choice -- not consensus-relevant
+        // since magic bytes/ports keep the networks from ever interoperating,
+        // but noted in PARAMETERS.md as a minor cosmetic overlap.
+        genesis = CreateGenesisBlock(1785326400, 73100, 0x1f00ffff, 7, 0);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x0000724595fb3b9609d441cbfb9577615c292abf07d996d3edabc48de843642d"));
-        assert(genesis.hashMerkleRoot == uint256S("0x12630d16a97f24b287c8c2594dda5fb98c9e6c70fc61d44191931ea2aa08dc90"));
+        assert(consensus.hashGenesisBlock == uint256S("0x719ff8d5c4773340ff014d12c0bbc623aa6fc2abc2b4ecd6dc7e93ef4f609b95"));
+        assert(genesis.hashMerkleRoot == uint256S("0x089c9664d716a35a805093b15b0dd6e9f58e84ca21a176c2783a377d23ef6b22"));
 
         vFixedSeeds.clear();
 
@@ -419,7 +486,7 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 
-        bech32_hrp = "tblk";
+        bech32_hrp = "tcac";
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
@@ -476,18 +543,26 @@ public:
         consensus.nProtocolV2Time = 1407053625;
         consensus.nProtocolV3Time = 1444028400;
         consensus.nProtocolV3_1Time = 1713938400;
-        consensus.nLastPOWBlock = 0x7fffffff;
+        // CodexaCoin: founder premine window enabled on regtest too (unlike
+        // upstream Blackcoin's regtest, which never leaves PoW) so the
+        // premine + coin-age PoS reward path can actually be exercised
+        // end-to-end in tests. See PARAMETERS.md section 5.
+        consensus.nLastPOWBlock = 500;
         consensus.nStakeTimestampMask = 0xf;
         consensus.nCoinbaseMaturity = 10;
+
+        consensus.nPremineTotal = CAmount{14000000000} * COIN;
+        consensus.nStakeRewardAnnualBP = 1368;
+        consensus.nStakeRewardAgeCapSeconds = 60 * 24 * 60 * 60; // 60 days
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
 
-        pchMessageStart[0] = 0x70;
-        pchMessageStart[1] = 0x35;
-        pchMessageStart[2] = 0x22;
-        pchMessageStart[3] = 0x06;
-        nDefaultPort = 35714;
+        pchMessageStart[0] = 0x17;
+        pchMessageStart[1] = 0xe4;
+        pchMessageStart[2] = 0xb9;
+        pchMessageStart[3] = 0x4c;
+        nDefaultPort = 36210;
         m_assumed_blockchain_size = 0;
 
         for (const auto& [dep, height] : opts.activation_heights) {
@@ -509,10 +584,12 @@ public:
             consensus.vDeployments[deployment_pos].min_activation_height = version_bits_params.min_activation_height;
         }
 
-        genesis = CreateGenesisBlock(1393221600, 216178, 0x1f00ffff, 1, 0);
+        // CodexaCoin: genesis mined by contrib/genesis/generate_genesis.cpp
+        // (trivial on regtest's near-maximal powLimit -- nonce=1).
+        genesis = CreateGenesisBlock(1785326400, 1, 0x207fffff, 7, 0);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x0000724595fb3b9609d441cbfb9577615c292abf07d996d3edabc48de843642d"));
-        assert(genesis.hashMerkleRoot == uint256S("0x12630d16a97f24b287c8c2594dda5fb98c9e6c70fc61d44191931ea2aa08dc90"));
+        assert(consensus.hashGenesisBlock == uint256S("0x66a3b7f4db8f62053c717aab1d5ff9fa8cfed4f7b27f2583b438ee8f4c9c12d1"));
+        assert(genesis.hashMerkleRoot == uint256S("0x089c9664d716a35a805093b15b0dd6e9f58e84ca21a176c2783a377d23ef6b22"));
 
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();
@@ -523,24 +600,15 @@ public:
 
         checkpointData = {
             {
-                {0, uint256S("0x0000724595fb3b9609d441cbfb9577615c292abf07d996d3edabc48de843642d")},
+                {0, consensus.hashGenesisBlock},
             }
         };
 
         m_assumeutxo_data = {
-            {
-                .height = 110,
-                .hash_serialized = AssumeutxoHash{uint256S("0x6657b736d4fe4db0cbc796789e812d5dba7f5c143764b1b6905612f1830609d1")},
-                .nChainTx = 111,
-                .blockhash = uint256S("0x696e92821f65549c7ee134edceeeeaaa4105647a3c4fd9f298c0aec0ab50425c")
-            },
-            {
-                // For use by test/functional/feature_assumeutxo.py
-                .height = 299,
-                .hash_serialized = AssumeutxoHash{uint256S("0x61d9c2b29a2571a5fe285fe2d8554f91f93309666fc9b8223ee96338de25ff53")},
-                .nChainTx = 300,
-                .blockhash = uint256S("0x7e0517ef3ea6ecbed9117858e42eedc8eb39e8698a38dcbd1b3962a283233f4c")
-            },
+            // CodexaCoin: Blackcoin's regtest assumeutxo snapshot hashes are
+            // meaningless for a different genesis/chain; cleared pending
+            // CAC-specific regeneration if assumeutxo functional tests are
+            // exercised (test/functional/feature_assumeutxo.py).
         };
 
         chainTxData = ChainTxData{
@@ -555,7 +623,7 @@ public:
         base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
 
-        bech32_hrp = "blrt";
+        bech32_hrp = "cacrt";
 
         vDevFundAddress = {};
     }
