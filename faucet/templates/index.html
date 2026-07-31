@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodexaCoin Testnet Faucet</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 4rem auto; padding: 0 1rem; color: #1a1a2e; }
+        h1 { font-size: 1.4rem; }
+        input[type=text] { width: 100%; padding: 0.6rem; font-size: 1rem; box-sizing: border-box; margin: 0.5rem 0; }
+        button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+        #website { display: none; }
+        #result { margin-top: 1rem; padding: 0.8rem; border-radius: 4px; display: none; }
+        #result.ok { background: #e6f9ec; color: #1a5c33; display: block; }
+        #result.err { background: #fdeceb; color: #8a2c22; display: block; }
+        .note { color: #666; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <h1>CodexaCoin Testnet Faucet</h1>
+    <p>Sends {{ payout }} testnet CAC to any valid testnet address. One claim per address every {{ cooldown_hours }} hours.</p>
+    <p class="note">Testnet coins have no value. Never send real (mainnet) CAC here.</p>
+
+    <form id="claim-form">
+        <label for="address">Testnet CAC address</label>
+        <input type="text" id="address" name="address" placeholder="t..." required autocomplete="off">
+        <!-- Honeypot field: hidden from real users via CSS, bots that autofill everything will trip it -->
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        <button type="submit">Request testnet CAC</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        const form = document.getElementById('claim-form');
+        const result = document.getElementById('result');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            result.className = '';
+            result.textContent = 'Sending...';
+            result.style.display = 'block';
+            try {
+                const resp = await fetch('/claim', { method: 'POST', body: new FormData(form) });
+                const data = await resp.json();
+                if (data.ok) {
+                    result.className = 'ok';
+                    result.textContent = `Sent ${data.amount} CAC. txid: ${data.txid}`;
+                } else {
+                    result.className = 'err';
+                    result.textContent = data.error || 'Something went wrong.';
+                }
+            } catch (err) {
+                result.className = 'err';
+                result.textContent = 'Network error -- please try again.';
+            }
+        });
+    </script>
+</body>
+</html>
