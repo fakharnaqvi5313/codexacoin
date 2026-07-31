@@ -1,0 +1,25 @@
+[Unit]
+Description=CodexaCoin Electrum server (electrumx-cac)
+After=network.target codexacoind.service
+Wants=codexacoind.service
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+EnvironmentFile=/etc/electrumx-cac.conf
+WorkingDirectory=__BUILD_DIR__
+ExecStart=__BUILD_DIR__/venv/bin/python3 __BUILD_DIR__/electrumx_server
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=100000
+
+# Hardening (electrumx needs no special privileges beyond its own data dir
+# and outbound network to the daemon RPC + inbound on its service ports)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/electrumx-cac
+
+[Install]
+WantedBy=multi-user.target
