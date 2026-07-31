@@ -262,12 +262,33 @@ CAmount ComputeCoinAgeReward(CAmount valueSat, int64_t ageSeconds, const Consens
     return static_cast<CAmount>(reward256.GetLow64());
 }
 
-// Sums ComputeCoinAgeReward() across every input of a coinstake transaction,
-// resolving each input's origin timestamp the same way CheckProofOfStake()
-// resolves the kernel's: Coin.nTime if set, else the origin block's time.
+// Sums ComputeCoinAgeReward() across every input of a coinstake transaction.
 // Used both to independently verify a submitted coinstake's reward during
 // ConnectBlock() and (by the wallet, with its own already-loaded prevouts)
 // to construct a valid coinstake in the first place.
+//
+// IMPORTANT: origin timestamp resolution here deliberately does NOT mirror
+// CheckStakeKernelHash()'s "Coin.nTime if set, else the origin block's
+// time" fallback, even though that's the pattern used for kernel-hash
+// scrambling elsewhere in this file. Coin.nTime is not canonical across
+// nodes: CTransaction only serializes nTime for nVersion<2
+// (primitives/transaction.h) -- for our nVersion=2 transactions it's the
+// node's own in-memory value if that node originally mined the block
+// (never serialized), but silently 0 if the node instead received the
+// block over P2P (deserialized, hitting the nVersion>=2 path). Since kernel
+// weight is amount-only (unaffected by coin-age), that inconsistency was
+// harmless before this feature existed. It stops being harmless the moment
+// age feeds into a *reward amount*, which every node must agree on
+// byte-for-byte: two nodes could otherwise compute two different
+// "originTime" values for the identical UTXO depending on which one mined
+// it, disagree on the allowed reward by the resulting few seconds of
+// coinbase-vs-block-time skew (node/miner.cpp sets a PoW block's final
+// time via std::max(MTP+1, ...) *after* the coinbase tx object already
+// self-initialized its own nTime at construction), and reject each other's
+// otherwise-valid blocks. Confirmed as a real, reproducible bug this
+// session (see PARAMETERS.md section 6.3) before this fix: always use the
+// origin block's own header time (canonical, identical on every node that
+// has that block, regardless of sync history), never Coin.nTime.
 CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction& tx, CCoinsViewCache& view, unsigned int nTimeTx, const Consensus::Params& params)
 {
     CAmount nTotal = 0;
@@ -277,7 +298,7 @@ CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction&
             continue; // Caller (ConnectBlock/CheckTxInputs) already rejects missing prevouts elsewhere.
 
         const CBlockIndex* blockFrom = pindexPrev->GetAncestor(coinPrev.nHeight);
-        int64_t originTime = coinPrev.nTime ? (int64_t)coinPrev.nTime : (blockFrom ? blockFrom->nTime : 0);
+        int64_t originTime = blockFrom ? blockFrom->nTime : 0;
         int64_t age = (int64_t)nTimeTx - originTime;
 
         nTotal += ComputeCoinAgeReward(coinPrev.out.nValue, age, params);

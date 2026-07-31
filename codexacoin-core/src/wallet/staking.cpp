@@ -17,6 +17,55 @@ namespace wallet {
 static int64_t GetStakeCombineThreshold() { return 500 * COIN; }
 static int64_t GetStakeSplitThreshold() { return 2 * GetStakeCombineThreshold(); }
 
+// CodexaCoin: resolve a wallet UTXO's origin time for coin-age reward
+// purposes. MUST match pos.cpp::GetCoinstakeMaxReward's resolution
+// EXACTLY, or the wallet can construct a coinstake that ConnectBlock (on
+// this node or any peer) then rejects as paying too much -- or, worse,
+// that a receiving node computes a *different* allowed reward for than
+// the constructing node did, causing nodes to disagree with each other
+// depending purely on which one originally mined a given input.
+//
+// Two bugs found and fixed this session, in order:
+//   1. Naively reading wtx.tx->nTime directly: CTransaction only
+//      serializes nTime for nVersion<2 (primitives/transaction.h); for our
+//      nVersion=2 transactions it deserializes as a hardcoded 0, making
+//      (txNew.nTime - 0) the "age" -- effectively the full Unix
+//      timestamp, clamped to AGE_CAP_SECONDS, inflating a single
+//      coinstake's reward by ~21,600x.
+//   2. Falling back to the confirming block's time only when tx->nTime
+//      was 0 (mirroring pos.cpp's OLD fallback pattern): tx->nTime can
+//      actually be *nonzero* here if this node originally mined the
+//      input itself (never round-tripped through (de)serialization), but
+//      a few seconds *earlier* than that same block's own header time
+//      (node/miner.cpp sets a PoW block's final nTime via
+//      std::max(MTP+1, ...) *after* the coinbase tx object already
+//      self-initialized its own nTime at construction). A peer that
+//      instead received that block over P2P has no such in-memory value
+//      and always falls back to the (later) block time -- so the two
+//      nodes compute two different rewards for the *same* input,
+//      and the peer correctly rejects the originating node's own block.
+//      Confirmed as a real, reproducible cross-node consensus failure
+//      this session (see PARAMETERS.md section 6.3).
+//
+// Fix for both: always use the origin block's own canonical header time,
+// via wallet.chain().findBlock() -- identical on every node that has that
+// block, regardless of whether they mined it or synced it -- never
+// wtx.tx->nTime, and never wallet-local metadata like nTimeReceived
+// (which depends on when *this* node happened to see the tx over P2P).
+static int64_t GetWalletTxOriginTime(const CWallet& wallet, const CWalletTx& wtx)
+{
+    if (const auto* conf = wtx.state<TxStateConfirmed>()) {
+        int64_t block_time = 0;
+        if (wallet.chain().findBlock(conf->confirmed_block_hash, interfaces::FoundBlock().time(block_time))) {
+            return block_time;
+        }
+    }
+    // Should be unreachable for any UTXO that passed SelectCoinsForStaking's
+    // depth check (which requires it to be confirmed), but fail safe to an
+    // age of 0 (no reward) rather than a wildly wrong one.
+    return 0;
+}
+
 void StakeCoins(CWallet& wallet, bool fStake) {
     node::StakeCoins(fStake, &wallet, wallet.threadStakeMinerGroup);
 }
@@ -386,7 +435,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
                 nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
                 nCoinAgeReward += ComputeCoinAgeReward(
                     pcoin.first->tx->vout[pcoin.second].nValue,
-                    (int64_t)txNew.nTime - (int64_t)pcoin.first->tx->nTime,
+                    (int64_t)txNew.nTime - GetWalletTxOriginTime(wallet, *pcoin.first),
                     Params().GetConsensus());
                 vwtxPrev.push_back(tx);
 
@@ -442,7 +491,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
             nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
             nCoinAgeReward += ComputeCoinAgeReward(
                 pcoin.first->tx->vout[pcoin.second].nValue,
-                (int64_t)txNew.nTime - (int64_t)pcoin.first->tx->nTime,
+                (int64_t)txNew.nTime - GetWalletTxOriginTime(wallet, *pcoin.first),
                 Params().GetConsensus());
             vwtxPrev.push_back(tx);
         }
