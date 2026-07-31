@@ -1,0 +1,190 @@
+name: release
+
+# Builds Linux (tarball + .deb), Windows (NSIS installer), and macOS (.dmg)
+# desktop wallet artifacts on tag push and attaches them to a GitHub
+# Release. Cross-compiles for Linux and Windows on an Ubuntu runner via the
+# depends/ system (same proven approach as .github/workflows/build.yml's CI
+# matrix, which already builds+tests these exact targets on every push --
+# this workflow reuses those matrix configs rather than re-deriving them).
+# macOS builds natively on a macos runner (no cross-compilation needed) so
+# it can use the same locally-verified `contrib/macdeploy/build_dmg.sh`
+# path used for local development builds.
+#
+# Codesigning/notarization for macOS and Authenticode signing for Windows
+# are NOT done here -- see the TODO comments below and
+# contrib/macdeploy/build_dmg.sh's own TODO output. Both require real
+# certificates this repo does not have; artifacts from this workflow are
+# unsigned.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # allow manual runs for testing without pushing a tag
+
+env:
+  MAKEJOBS: 4
+  SDK_URL: https://bitcoincore.org/depends-sources/sdks
+
+permissions:
+  contents: write # needed to create the Release and upload assets
+
+jobs:
+  linux:
+    name: linux-x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make automake cmake curl g++-multilib libtool binutils-gold \
+            bsdmainutils pkg-config python3 patch bison ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Dependency cache
+        uses: actions/cache@v4.3.0
+        with:
+          path: ./depends/built
+          key: release-linux-64-bit-depends-${{ hashFiles('depends/packages/*') }}
+
+      - name: Build depends
+        run: make -j "$MAKEJOBS" -C depends HOST=x86_64-pc-linux-gnu
+
+      - name: Build CodexaCoin
+        run: |
+          ./autogen.sh
+          ./configure --prefix="$PWD/depends/x86_64-pc-linux-gnu" --enable-sse2 \
+            --enable-glibc-back-compat LDFLAGS=-static-libstdc++ --enable-reduce-exports \
+            || ( cat config.log && false )
+          make -j "$MAKEJOBS" install
+
+      - name: Determine version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        run: |
+          STAGE=codexacoin-${{ steps.ver.outputs.version }}-x86_64-linux-gnu
+          mkdir -p "$STAGE/bin"
+          cp depends/x86_64-pc-linux-gnu/bin/codexacoin* "$STAGE/bin/"
+          cp README.md COPYING "$STAGE/"
+          tar -czf "${STAGE}.tar.gz" "$STAGE"
+
+      - name: Package .deb (via fpm)
+        run: |
+          VER=${{ steps.ver.outputs.version }}
+          fpm -s dir -t deb \
+            --name codexacoin \
+            --version "$VER" \
+            --architecture amd64 \
+            --description "CodexaCoin (CAC) full node and CLI" \
+            --license MIT \
+            --url "https://github.com/codexacoin/codexacoin-core" \
+            --maintainer "CodexaCoin developers" \
+            depends/x86_64-pc-linux-gnu/bin/codexacoind=/usr/bin/codexacoind \
+            depends/x86_64-pc-linux-gnu/bin/codexacoin-cli=/usr/bin/codexacoin-cli \
+            depends/x86_64-pc-linux-gnu/bin/codexacoin-tx=/usr/bin/codexacoin-tx
+
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: linux-x86_64
+          path: |
+            *.tar.gz
+            *.deb
+          if-no-files-found: error
+
+  windows:
+    name: windows-x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis g++-mingw-w64-x86-64 build-essential libtool \
+            autotools-dev automake pkg-config bsdmainutils curl git
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - name: Dependency cache
+        uses: actions/cache@v4.3.0
+        with:
+          path: ./depends/built
+          key: release-windows-64-bit-depends-${{ hashFiles('depends/packages/*') }}
+
+      - name: Build depends
+        run: make -j "$MAKEJOBS" -C depends HOST=x86_64-w64-mingw32
+
+      - name: Build CodexaCoin
+        run: |
+          ./autogen.sh
+          ./configure --prefix="$PWD/depends/x86_64-w64-mingw32" --enable-sse2 \
+            LDFLAGS=-static-libgcc --enable-reduce-exports || ( cat config.log && false )
+          make -j "$MAKEJOBS" deploy
+
+      # TODO: sign the installer with a real Authenticode certificate before
+      # any public distribution, e.g.:
+      #   osslsigncode sign -certs cert.pem -key key.pem \
+      #     -n "CodexaCoin Core" -i https://codexacoin.example \
+      #     -in codexacoin-*-win64-setup.exe -out codexacoin-*-win64-setup-signed.exe
+      # This repo has no such certificate; artifacts here are unsigned and
+      # will trigger Windows SmartScreen warnings.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: windows-x86_64
+          path: "*win64-setup.exe"
+          if-no-files-found: error
+
+  macos:
+    name: macos-x86_64
+    runs-on: macos-13 # x86_64 runner; matches this project's local dev build target
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Homebrew)
+        run: |
+          brew install boost libevent qt@5 pkg-config
+          echo "$(brew --prefix qt@5)/bin" >> "$GITHUB_PATH"
+
+      - name: Build CodexaCoin
+        run: |
+          ./autogen.sh
+          ./configure --with-gui=yes --with-sqlite=yes --without-bdb \
+            --disable-bench --disable-tests --disable-fuzz-binary --disable-hardening
+          make -j "$(sysctl -n hw.ncpu)"
+
+      - name: Build .dmg
+        run: ./contrib/macdeploy/build_dmg.sh
+
+      # TODO: codesign + notarize before any public distribution -- see
+      # contrib/macdeploy/build_dmg.sh's own printed instructions. This
+      # repo has no Apple Developer ID certificate; the dmg produced here
+      # is unsigned and macOS Gatekeeper will warn on first launch.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: macos-x86_64
+          path: "*.dmg"
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List staged artifacts
+        run: ls -la artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true # leave as a draft so a human reviews before publishing -- see doc/release-process.md
+          generate_release_notes: true
