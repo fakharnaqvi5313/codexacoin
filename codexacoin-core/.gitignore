@@ -177,6 +177,11 @@ src/qt/codexacoin-qt.includes
 src/qt/codexacoin-qt
 CodexaCoin-Qt.app
 
+# Phase 3: packaged desktop build artifacts (built by contrib/*/build_*.sh, never committed)
+*.dmg
+*.deb
+CodexaCoin-Core-*
+
 # Unit-tests
 codexacoin-qt_test
 
