@@ -1631,6 +1631,82 @@ class BlackcoinTestnet(Blackcoin):
     ]
 
 
+class CodexaCoin(ScryptMixin, Coin):
+    '''CodexaCoin (CAC) -- forked from Blackcoin More (see PARAMETERS.md at
+    the CodexaCloud repo root for the full parameter set). Transaction wire
+    format, PoS coinstake nTime field, and block-version-conditional header
+    hashing are all unchanged from Blackcoin -- only chain identity
+    (genesis, magic-adjacent RPC port, address prefixes) differs, so this
+    reuses DeserializerBlackcoinSegWit and BlackcoinDaemon as-is rather
+    than subclassing them.'''
+    NAME = "CodexaCoin"
+    SHORTNAME = "CAC"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("1c")
+    P2SH_VERBYTES = (bytes.fromhex("3f"),)
+    GENESIS_HASH = ('ecf4dfc81beeb2a992ee169e1fc349144'
+                     'e48108d7a03f7fb6d619c2bd845038e')
+    DESERIALIZER = lib_tx.DeserializerBlackcoinSegWit
+    DAEMON = daemon.BlackcoinDaemon
+    # Fresh chain: premine window is 500 blocks, negligible tx count so far.
+    TX_COUNT = 500
+    TX_COUNT_HEIGHT = 500
+    TX_PER_BLOCK = 1
+    RPC_PORT = 16211
+    REORG_LIMIT = 500
+    ESTIMATE_FEE = 0.001
+    PEERS = [
+        # TODO: placeholders, no real Electrum server infrastructure exists
+        # yet -- see PARAMETERS.md section 9 / provisioning/electrumx/.
+        'electrum1.codexacoin.example t10001 s10002',
+        'electrum2.codexacoin.example t20001 s20002',
+    ]
+
+
+class CodexaCoinTestnet(CodexaCoin):
+    NAME = "CodexaCoinTestnet"
+    SHORTNAME = "tCAC"
+    NET = "testnet"
+    P2PKH_VERBYTE = bytes.fromhex("6F")
+    P2SH_VERBYTES = (bytes.fromhex("C4"),)
+    GENESIS_HASH = ('719ff8d5c4773340ff014d12c0bbc623a'
+                     'a6fc2abc2b4ecd6dc7e93ef4f609b95')
+    DESERIALIZER = lib_tx.DeserializerBlackcoinSegWit
+    DAEMON = daemon.BlackcoinDaemon
+    TX_COUNT = 500
+    TX_COUNT_HEIGHT = 500
+    TX_PER_BLOCK = 1
+    RPC_PORT = 26211
+    REORG_LIMIT = 500
+    ESTIMATE_FEE = 0.001
+    PEERS = [
+        'testnet-electrum1.codexacoin.example t10011 s10012',
+        'testnet-electrum2.codexacoin.example t20011 s20012',
+    ]
+
+
+class CodexaCoinRegtest(CodexaCoin):
+    '''Used to test this adaptation locally against a regtest codexacoind
+    -- not part of the spec'd deliverable, added so the Phase 4 claim of
+    "verified against a real node" is checkable, not just asserted.'''
+    NAME = "CodexaCoinRegtest"
+    SHORTNAME = "rCAC"
+    NET = "regtest"
+    P2PKH_VERBYTE = bytes.fromhex("6F")
+    P2SH_VERBYTES = (bytes.fromhex("C4"),)
+    GENESIS_HASH = ('66a3b7f4db8f62053c717aab1d5ff9fa8'
+                     'cfed4f7b27f2583b438ee8f4c9c12d1')
+    DESERIALIZER = lib_tx.DeserializerBlackcoinSegWit
+    DAEMON = daemon.BlackcoinDaemon
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 0
+    TX_PER_BLOCK = 1
+    RPC_PORT = 36211
+    REORG_LIMIT = 500
+    ESTIMATE_FEE = 0.001
+    PEERS = []
+
+
 class Bitbay(ScryptMixin, Coin):
     NAME = "Bitbay"
     SHORTNAME = "BAY"
