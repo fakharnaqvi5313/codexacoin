@@ -3,7 +3,7 @@
 All notable changes to the CodexaCoin project. Format is loosely
 [Keep a Changelog](https://keepachangelog.com/); dates are UTC.
 
-## Phase 1 — Fork, rebrand, and reconfigure the core (in progress)
+## Phase 1 — Fork, rebrand, and reconfigure the core
 
 ### 2026-07-31
 
@@ -94,7 +94,90 @@ All notable changes to the CodexaCoin project. Format is loosely
 See `PARAMETERS.md` §9 for the remaining open TODOs before any public
 testnet/mainnet launch (mine and checkpoint the *real* mainnet premine
 window, write the formal Appendix A.5 test suite, register the BIP44 coin
-type, stand up seed infrastructure, build the Qt wallet).
+type, stand up seed infrastructure).
+
+- **Qt GUI wallet built** (2026-07-31, during Phase 2 work): `qt@5` had no
+  prebuilt Homebrew bottle on this macOS version and was built from full
+  source (~57 minutes). `CodexaCoin-Qt.app` assembled via the project's own
+  `make` bundle target and verified to launch and initialize correctly
+  (wallet creation, staking thread startup — confirmed via its own
+  debug.log, same as the daemon). Dynamically linked against the
+  Homebrew-installed Qt/libevent, so it runs on this machine but isn't yet
+  a portable, ship-to-another-Mac bundle (would need the
+  `macdeployqtplus` framework-bundling step).
+
+---
+
+## Phase 2 — Testnet and regtest validation
+
+### 2026-07-31
+
+- **Two real coin-age reward bugs found and fixed**, both caught
+  specifically by multi-node functional testing that exercises scenarios
+  Phase 1's single-node verification never did (a node staking *received*
+  coins, not just self-mined ones; two independently-staking nodes
+  reconnecting and needing to agree on each other's blocks):
+  - **Wallet overpay bug**: `wallet/staking.cpp` read a wallet
+    transaction's `tx->nTime` directly for coin-age. `CTransaction` only
+    serializes `nTime` for `nVersion<2`; this codebase's `nVersion=2`
+    transactions always deserialize it as `0`. For *received* coins this
+    made age ≈ the full Unix timestamp, clamped to the 60-day age cap,
+    inflating a single coinstake's reward by **~21,600×**. `ConnectBlock`
+    correctly rejected every such block, so nothing bad was ever accepted
+    on-chain, but the wallet could never construct a valid coinstake from
+    received funds at all.
+  - **Cross-node disagreement bug**: the first fix's fallback (mirroring
+    the kernel-hash code's `Coin.nTime`-if-set pattern) used a value
+    that isn't canonical across nodes — nonzero only if *that node*
+    happened to mine the input's block itself. Two nodes could compute
+    two different maximum-allowed rewards for the identical coinstake
+    depending purely on which one mined the spent input, and a receiving
+    node could reject the originating node's own honestly-built block.
+    Reproduced live: a real `coinstake pays too much` rejection
+    immediately after two independently-staking nodes reconnected.
+  - **Fix**: both the consensus check (`pos.cpp::GetCoinstakeMaxReward`)
+    and the wallet (`wallet/staking.cpp::GetWalletTxOriginTime`) now
+    resolve coin-age origin time via *only* the origin/confirming block's
+    own canonical header time — identical on every node regardless of
+    mining-vs-syncing history. Re-verified exact-to-the-satoshi after the
+    fix (previously tolerance-bounded to absorb the bug's own timing
+    slop). Full writeup: `PARAMETERS.md` §6.3.
+- **Functional test suite added**: `feature_premine.py` (exact supply,
+  PoW-rejection-past-window), `feature_coinage_reward.py` (formula
+  verification against a live staked block), `feature_pos_reorg.py`
+  (two nodes independently stake, reconnect, must converge to a single
+  consistent chain and supply — the test that caught both bugs above).
+  Also fixed a pre-existing, unrelated bug in the inherited test
+  framework itself (`test_node.py`'s `v2transport` parameter was
+  referenced but never declared, breaking *every* functional test's node
+  startup) and documented a real but harmless timing behavior:
+  rapidly bulk-mining the premine window leaves the chain's
+  median-time-past minutes ahead of real wall-clock time, so staking
+  correctly pauses until real time catches up (`PARAMETERS.md` §6.2) —
+  not a hang, but worth knowing before assuming something's broken.
+- **Docker Compose 3-node regtest environment** added (`docker/`):
+  three `codexacoind` nodes on a private network plus a one-shot `init`
+  service that mines the premine, verifies it via the (unmodified)
+  `audit_premine_supply.py`, confirms PoW rejection past the window, and
+  confirms PoS propagation across all three nodes. **Not independently
+  executed** — no Docker runtime is installed in this environment: this
+  is reviewed-consistent-with-the-real-build config, not a verified test
+  run. The same behavior *is* independently verified without Docker via
+  the new functional tests.
+- **Testnet seed node provisioning scripts** added (`provisioning/`):
+  idempotent shell script for a pure P2P relay/validating node — no
+  wallet (`--disable-wallet`), no premine, no keys, systemd service,
+  firewalled to the P2P port only.
+- **Testnet faucet** added (`faucet/`): minimal Flask app, per-IP and
+  per-address rate limiting, honeypot instead of external CAPTCHA. Found
+  and fixed two bugs while smoke-testing: Flask-Limiter's rate-string
+  parser silently no-ops on a fractional hour count (fixed by expressing
+  the limit in whole minutes), and a port-5000 conflict (a stale process
+  plus macOS's own AirPlay Receiver default) that made a "restart" look
+  like it hadn't fixed anything when the old process was still serving
+  requests.
+
+See `PARAMETERS.md` §9 for what's still open before any public launch.
 
 ---
 
