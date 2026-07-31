@@ -248,6 +248,54 @@ See `PARAMETERS.md` §9/§10 for what's still open before any public launch.
 
 ---
 
+## Phase 4 — Light-wallet backend (required for mobile)
+
+### 2026-07-31
+
+- **`electrumx-cac` added**, adapting
+  [CoinBlack/electrumx-blk](https://github.com/CoinBlack/electrumx-blk)
+  (Blackcoin's own ElectrumX fork) rather than Fulcrum — researched both
+  first; Fulcrum has no generic altcoin/PoS transaction support at all
+  (BTC/BCH/LTC-specific only), while electrumx-blk already ships a
+  Blackcoin-specific transaction deserializer that correctly handles the
+  PoS coinstake `nTime` field CAC inherits unchanged, and a
+  version-conditional header-hash mixin that already matches this fork's
+  real block-version behavior (every CAC block is `nVersion=7`). Added
+  `CodexaCoin`/`CodexaCoinTestnet`/`CodexaCoinRegtest` coin-definition
+  classes (genesis hash, RPC port, address prefixes from PARAMETERS.md);
+  reused the existing Blackcoin transaction deserializer and daemon RPC
+  wrapper unmodified since none of that logic needed to change.
+- **Verified against a real node**: ran electrumx-cac against a local
+  regtest `codexacoind` and confirmed it connects and correctly identifies
+  the daemon via the new coin definition. Full end-to-end block indexing
+  was not verified locally — both of electrumx's storage backends
+  (leveldb/plyvel, rocksdb) failed to build/run on this specific
+  development machine's macOS version (12.7.6, below Homebrew's supported
+  tier for the rocksdb formula; plyvel hit a runtime ABI/symbol-visibility
+  mismatch against Homebrew's leveldb) — an environment packaging issue,
+  not a CAC-adaptation problem. The provided Docker image sidesteps it
+  entirely via Debian's packaged leveldb.
+- **Deployment scripts added** (`provisioning/electrumx/`): idempotent
+  shell provisioning script (systemd service, Let's Encrypt via certbot
+  standalone — electrumx has native TLS support, no reverse-proxy needed)
+  and a Dockerfile (the recommended path given the local packaging issue
+  above). Network-aware port ranges (mainnet/testnet/regtest each get
+  distinct ports, not just distinct configs, so a misconfigured wallet
+  can't silently connect to the wrong chain on a plausible port).
+- **Mobile API gateway specified** (`docs/mobile-api.md`): REST/JSON
+  endpoints for balance, UTXOs, history, transaction detail (including
+  coin-age reward decoding for coinstake transactions), broadcast, and fee
+  estimate, each mapped to the specific underlying Electrum-protocol call
+  it wraps. Also specifies the Phase 6 staking-service endpoint shapes
+  (custodial 6A: status/deposit/withdraw; cold-staking 6B:
+  delegate/revoke) as a stable contract for Phase 5 mobile development,
+  even though no staking backend exists yet. This is a specification
+  only — the gateway service itself is Phase 5/6 implementation work.
+
+See `PARAMETERS.md` §9/§11 for what's still open before any public launch.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

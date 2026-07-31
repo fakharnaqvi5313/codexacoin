@@ -481,3 +481,36 @@ cert), so this is a real TODO, not an oversight:
   `Release` file at the *repository* level (e.g. an APT repo), not
   per-package — not applicable until there's an actual package repository
   to publish to.
+
+---
+
+## 11. Light-wallet backend (Phase 4)
+
+`electrumx-cac` (CodexaCloud repo root) adapts
+[CoinBlack/electrumx-blk](https://github.com/CoinBlack/electrumx-blk) —
+chosen over Fulcrum because Fulcrum has no generic altcoin/PoS support at
+all (BTC/BCH/LTC-specific transaction handling only). `electrumx-blk`
+already had a Blackcoin-specific transaction deserializer handling the PoS
+coinstake `nTime` field CAC inherits unchanged, and a
+version-conditional header-hash mixin that already matches this fork's
+real block-version behavior — so adapting it was almost entirely
+chain-identity configuration (genesis hash, RPC port, address prefixes),
+not protocol work. See `provisioning/electrumx/README.md` for the full
+writeup, including exactly what was and wasn't verified locally (RPC
+connectivity: yes; full block indexing: blocked by a macOS-12-specific
+Python C-extension packaging issue with both of electrumx's storage
+backends, not a CAC problem — the provided Dockerfile sidesteps it via
+Debian's packaged leveldb).
+
+### Open TODOs from this phase
+
+1. Stand up the 2 real Electrum servers `provisioning/electrumx/` deploys
+   to (currently placeholder hostnames, same TODO status as the DNS seeds
+   in item 6 above).
+2. Verify full block indexing end-to-end on a real Linux host or via the
+   provided Docker image (not blocked there — only blocked on this
+   session's specific macOS 12 dev machine).
+3. Build the actual mobile API gateway service specified in
+   `docs/mobile-api.md` — that document is a specification only; Phase 4
+   did not implement the gateway itself (Phase 5/6 work, once the mobile
+   app architecture and staking service exist to build it alongside).
