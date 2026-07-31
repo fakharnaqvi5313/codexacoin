@@ -156,6 +156,7 @@ private:
     QAction* changePassphraseAction = nullptr;
     QAction *unlockWalletAction = nullptr;
     QAction *lockWalletAction = nullptr;
+    QAction *stakingEnabledAction = nullptr;
     QAction* aboutQtAction = nullptr;
     QAction* openRPCConsoleAction = nullptr;
     QAction* openAction = nullptr;
@@ -325,6 +326,13 @@ public Q_SLOTS:
 
 #ifdef ENABLE_WALLET
     void updateStakingIcon();
+    /** User toggled the "Enable Staking" menu item. For an encrypted,
+     *  locked wallet this triggers the existing unlock-for-staking flow
+     *  (AskPassphraseDialog::UnlockStaking); otherwise it calls
+     *  setEnabledStaking() directly. Unchecking always calls
+     *  setEnabledStaking(false) directly -- staking can be turned off
+     *  without re-locking the wallet for spending. */
+    void toggleStakingEnabled(bool enable);
 #endif
 
     /** called by a timer to check if ShutdownRequested() has been set **/

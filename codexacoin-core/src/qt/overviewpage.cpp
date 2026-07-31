@@ -5,6 +5,7 @@
 #include <qt/overviewpage.h>
 #include <qt/forms/ui_overviewpage.h>
 
+#include <chainparams.h>
 #include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
@@ -223,6 +224,30 @@ void OverviewPage::setBalance(const interfaces::WalletBalances& balances)
         ui->labelTotal->setText(BitcoinUnits::formatWithPrivacy(unit, balances.balance + balances.unconfirmed_balance + balances.immature_balance + balances.stake, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy));
     }
     ui->labelDonations->setText((m_privacy ? QString::fromStdString("#") : (QString::number(donation_percentage) + "%")) + " of stake rewards");
+
+    // CodexaCoin: deterministic monthly reward estimate at the coin-age
+    // staking rate (spec Appendix A / PARAMETERS.md section 6), applied to
+    // the current spendable balance as a stand-in for "stakeable" -- not
+    // exact (doesn't account for per-UTXO min-age/maturity timing or the
+    // 60-day age cap), but a reasonable steady-state estimate: at the
+    // target rate a balance held continuously earns
+    // balance * (nStakeRewardAnnualBP / 10000) / 12 per month, simple
+    // (non-compounded) -- matches the "~1.14%/month" figure quoted
+    // elsewhere rather than the compounded annual figure, since that's
+    // the number users actually see accrue month to month.
+    {
+        // Double arithmetic deliberately: this is a UI estimate, not a
+        // consensus amount, so there's no need for the 128-bit intermediate
+        // math the actual reward formula uses in pos.cpp (naive int64
+        // multiplication here -- balance * annualBP -- would overflow for
+        // any realistically large balance, e.g. the premine scale).
+        const int64_t annualBP = Params().GetConsensus().nStakeRewardAnnualBP;
+        const CAmount monthlyReward = static_cast<CAmount>(
+            (static_cast<double>(balances.balance) * annualBP / 10000.0) / 12.0);
+        ui->labelStakingRewardEstimate->setText(
+            BitcoinUnits::formatWithPrivacy(unit, monthlyReward, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy)
+            + " / " + tr("month"));
+    }
     // only show immature (newly mined) balance if it's non-zero, so as not to complicate things
     // for the non-mining users
     bool showImmature = balances.immature_balance != 0;

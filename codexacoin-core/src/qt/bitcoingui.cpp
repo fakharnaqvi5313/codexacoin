@@ -333,6 +333,11 @@ void BitcoinGUI::createActions()
     unlockWalletAction->setObjectName("unlockWalletAction");
     lockWalletAction = new QAction(tr("&Lock Wallet"), this);
     lockWalletAction->setToolTip(tr("Lock wallet"));
+
+    stakingEnabledAction = new QAction(tr("&Enable Staking"), this);
+    stakingEnabledAction->setStatusTip(tr("Stake your CodexaCoin balance to earn the coin-age staking reward (~1.14%/month)"));
+    stakingEnabledAction->setCheckable(true);
+    stakingEnabledAction->setObjectName("stakingEnabledAction");
     signMessageAction = new QAction(tr("Sign &message…"), this);
     signMessageAction->setStatusTip(tr("Sign messages with your CodexaCoin addresses to prove you own them"));
     verifyMessageAction = new QAction(tr("&Verify message…"), this);
@@ -407,6 +412,7 @@ void BitcoinGUI::createActions()
         connect(changePassphraseAction, &QAction::triggered, walletFrame, &WalletFrame::changePassphrase);
         connect(unlockWalletAction, SIGNAL(triggered()), walletFrame, SLOT(unlockWallet()));
         connect(lockWalletAction, SIGNAL(triggered()), walletFrame, SLOT(lockWallet()));
+        connect(stakingEnabledAction, &QAction::triggered, this, &BitcoinGUI::toggleStakingEnabled);
         connect(signMessageAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
         connect(signMessageAction, &QAction::triggered, [this]{ gotoSignMessageTab(); });
         connect(m_load_psbt_action, &QAction::triggered, [this]{ gotoLoadPSBT(); });
@@ -525,6 +531,8 @@ void BitcoinGUI::createMenuBar()
         settings->addAction(changePassphraseAction);
         settings->addAction(unlockWalletAction);
         settings->addAction(lockWalletAction);
+        settings->addSeparator();
+        settings->addAction(stakingEnabledAction);
         settings->addSeparator();
         settings->addAction(m_mask_values_action);
         settings->addSeparator();
@@ -1555,9 +1563,21 @@ void BitcoinGUI::updateStakingIcon()
         // Not staking because wallet is closed
         labelStakingIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/staking_off").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
         labelStakingIcon->setToolTip(tr("Not staking"));
+        stakingEnabledAction->setEnabled(false);
         return;
     }
     WalletModel * const walletModel = walletView->getWalletModel();
+
+    // Keep the "Enable Staking" menu checkbox in sync with actual wallet
+    // state (which can change from outside this toggle, e.g. via the
+    // passphrase dialog's own UnlockStaking flow, or on wallet switch).
+    // Block signals so this doesn't re-trigger toggleStakingEnabled().
+    stakingEnabledAction->setEnabled(true);
+    const bool stakingEnabledNow = walletModel->wallet().getEnabledStaking();
+    if (stakingEnabledAction->isChecked() != stakingEnabledNow) {
+        QSignalBlocker blocker(stakingEnabledAction);
+        stakingEnabledAction->setChecked(stakingEnabledNow);
+    }
 
     uint64_t nWeight = walletModel->getStakeWeight();
     if (walletModel->wallet().getLastCoinStakeSearchInterval() &&
@@ -1612,6 +1632,34 @@ void BitcoinGUI::updateStakingIcon()
         else
             labelStakingIcon->setToolTip(tr("Not staking because staking is disabled"));
     }
+}
+
+void BitcoinGUI::toggleStakingEnabled(bool enable)
+{
+    WalletView * const walletView = walletFrame ? walletFrame->currentWalletView() : nullptr;
+    if (!walletView) {
+        stakingEnabledAction->setChecked(false);
+        return;
+    }
+    WalletModel * const walletModel = walletView->getWalletModel();
+
+    if (enable && walletModel->getEncryptionStatus() == WalletModel::Locked) {
+        // Encrypted + locked: reuse the existing unlock-for-staking flow
+        // (AskPassphraseDialog::UnlockStaking), which itself calls
+        // setEnabledStaking(true) on a successful unlock. If the user
+        // cancels, the wallet stays locked/staking-disabled, so revert
+        // the checkbox rather than leaving it checked against reality.
+        walletView->unlockWallet(/*fromMenu=*/true);
+        if (walletModel->getEncryptionStatus() == WalletModel::Locked) {
+            stakingEnabledAction->setChecked(false);
+        }
+        return;
+    }
+
+    // Unencrypted, or already unlocked: no passphrase needed either way.
+    // Unchecking always takes this path too -- turning staking off never
+    // needs to re-lock the wallet for spending.
+    walletModel->wallet().setEnabledStaking(enable);
 }
 #endif
 
