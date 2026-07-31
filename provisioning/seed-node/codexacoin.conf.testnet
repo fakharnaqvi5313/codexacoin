@@ -1,0 +1,33 @@
+# CodexaCoin testnet seed node configuration.
+# Installed to /etc/codexacoin/codexacoin.conf by provision.sh.
+#
+# This is a pure P2P relay/validation node: no wallet (binary is compiled
+# with --disable-wallet), no RPC exposed to the network. See
+# PARAMETERS.md for why seed nodes deliberately hold no premine/keys.
+
+testnet=1
+server=1
+listen=1
+daemon=0
+
+# P2P port per PARAMETERS.md section 3.2. RPC (26211) is intentionally not
+# bound to a public interface here -- operators needing remote RPC should
+# tunnel over SSH rather than opening it up.
+port=26210
+
+# Modest resource footprint for a small VPS. Raise dbcache if the VPS has
+# more RAM to spare; this is a conservative default.
+dbcache=256
+maxconnections=64
+
+# TODO: once the second seed node's IP/hostname is known, add it here so
+# the two seeds actively peer with each other (in addition to organically
+# discovering other testnet peers):
+# addnode=<other-seed-ip-or-hostname>:26210
+
+# Logging: journald captures stdout (systemd unit doesn't set
+# -printtoconsole=0 vs debug.log -- daemon=0 above plus systemd's Type=notify
+# means codexacoind runs in the foreground under systemd, logging to both
+# debug.log in the datadir and journald). Increase verbosity here if
+# debugging sync issues:
+# debug=net
