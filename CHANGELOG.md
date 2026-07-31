@@ -181,6 +181,73 @@ See `PARAMETERS.md` §9 for what's still open before any public launch.
 
 ---
 
+## Phase 3 — Desktop wallet builds (Windows, Linux, macOS)
+
+### 2026-07-31
+
+- **macOS `.dmg` built and verified end-to-end.** `macdeployqt` bundles the
+  Qt frameworks into `CodexaCoin-Qt.app` (confirmed via `otool -L`: no more
+  external Homebrew/Qt paths, only standard macOS system libraries), then
+  `hdiutil` packages it with an `Applications` symlink into
+  `CodexaCoin-Core-macOS.dmg` (~31MB, checksum-verified). Relaunched the
+  bundled app directly to confirm it still initializes correctly after
+  bundling. Scripted as `contrib/macdeploy/build_dmg.sh` (reusable, not a
+  one-off manual sequence) — also prints the exact `codesign`/
+  `notarytool`/`stapler` commands needed before public distribution
+  (`PARAMETERS.md` §10; no Apple Developer ID certificate exists in this
+  environment).
+- **GitHub Actions release workflow added**
+  (`.github/workflows/release.yml`): builds Linux (tarball + `.deb` via
+  `fpm`), Windows (NSIS installer), and macOS (`.dmg`, native runner) on
+  tag push, publishing a draft GitHub Release with all artifacts attached.
+  Reuses the already-proven Ubuntu-runner + `depends/` cross-compilation
+  matrix from the existing `build.yml` CI workflow rather than re-deriving
+  build configuration. **Not run end-to-end** — needs an actual tag push
+  to fully verify; the macOS leg is the only one independently verified
+  locally this session.
+- **Windows and Linux builds not produced locally** — genuine environment
+  constraints, not toolchain problems, both documented in detail in
+  `PARAMETERS.md` §9 item 9: Windows' mingw-w64 cross-compiler works fine
+  (Boost/libevent built successfully via `depends/`) but the Qt 5.15.10
+  source download reset mid-transfer from `download.qt.io` on two separate
+  attempts, and the depends system's fallback mirror 404s for this exact
+  file; Linux cross-compilation from a bare macOS host isn't supported by
+  the depends system at all (it expects a pre-installed cross-compiler,
+  matching Ubuntu's `apt-get` pattern — it doesn't build one from scratch,
+  and none is available via Homebrew in a supported form). Both are
+  expected to work fine on GitHub Actions' Ubuntu runners, which is what
+  the release workflow actually relies on.
+- **Qt UI staking controls added**, extending Blackcoin More's existing
+  (and already fairly complete) staking UI rather than building from
+  scratch — it already had a live status-bar icon
+  (`updateStakingIcon()`, updated every second) and an
+  encrypted-wallet-specific "unlock for staking" flow, but no general
+  on/off control and no reward-amount estimate:
+  - **"Enable Staking" toggle** (`bitcoingui.h`/`.cpp`): a checkable
+    Settings-menu action. Checking it on an encrypted, locked wallet
+    reuses the existing `AskPassphraseDialog::UnlockStaking` flow
+    (reverting the checkbox if the user cancels); otherwise it calls
+    `setEnabledStaking()` directly — including for turning staking *off*,
+    which never needs to re-lock the wallet for spending. The checkbox
+    stays in sync with actual state (e.g. if staking was toggled via the
+    passphrase-dialog path instead) via `updateStakingIcon()`'s existing
+    1-second timer, signal-blocked to avoid feedback loops.
+  - **Expected monthly reward estimate** (`overviewpage.ui`/`.cpp`): a new
+    "Est. monthly reward" row on the Overview page, computed from the
+    current spendable balance and the `nStakeRewardAnnualBP` consensus
+    parameter (simple, non-compounded — matches the "~1.14%/month" figure
+    quoted elsewhere, the number users actually watch accrue, rather than
+    the compounded annual figure). This is a UI-only estimate: it uses
+    double-precision arithmetic (deliberately, not the 128-bit path
+    `pos.cpp`'s actual reward formula uses — naive `int64` multiplication
+    here would overflow for any realistically large balance) and doesn't
+    account for per-UTXO maturity timing or the 60-day age cap, so it's
+    documented as an estimate, never a guarantee, in its own tooltip.
+
+See `PARAMETERS.md` §9/§10 for what's still open before any public launch.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

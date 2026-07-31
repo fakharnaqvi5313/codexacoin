@@ -423,12 +423,61 @@ the daemon has been run against them (see §6.1).
    (not consensus-critical, cosmetic/compatibility only).
 6. Stand up real DNS seed hostnames (`seed1.codexacoin.example` etc. are
    placeholders in `kernel/chainparams.cpp`).
-7. Build the Qt desktop wallet. Not attempted this phase: `qt@5` has no
-   prebuilt Homebrew bottle on this macOS version (12.7.6/Monterey) and would
-   compile from full source (realistically 1-3+ hours) — impractical for this
-   session. `codexacoind`/`codexacoin-cli`/`codexacoin-tx`/`codexacoin-util`/
-   `codexacoin-wallet` all build and run correctly headless; only the GUI
-   binary is unverified.
+7. ~~Build the Qt desktop wallet~~ — **done in Phase 2/3**: `qt@5` was built
+   from full source (~57 min, no prebuilt bottle for this macOS version) and
+   `CodexaCoin-Qt.app` verified launching correctly. Phase 3 additionally
+   bundled it into a portable, redistributable `.dmg`
+   (`contrib/macdeploy/build_dmg.sh`) — see §10 for what's still missing
+   before public distribution (codesigning/notarization).
 8. Generate a dev fund address and decide whether to enable the donation
    feature (currently disabled — `vDevFundAddress` is empty on every network,
    see `kernel/chainparams.cpp`).
+9. Actually produce Windows and Linux desktop build artifacts. Phase 3
+   wrote the cross-compilation config (`.github/workflows/release.yml`,
+   reusing the proven Ubuntu-runner + `depends/` matrix from the existing
+   `build.yml` CI) but could not produce either **locally** in this
+   session's macOS-only, no-Docker environment:
+   - **Windows**: the mingw-w64 cross-compiler is installed and works (Boost
+     and libevent built successfully via `depends/`), but the Qt 5.15.10
+     source download from `download.qt.io` reset mid-transfer on two
+     separate attempts at a similar point (~15-30% through the 48MB file),
+     and the depends system's own fallback mirror
+     (`bitcoincore.org/depends-sources`) 404s for this exact filename. This
+     reads as an environment-specific network constraint (a proxy or
+     egress limit on that specific host), not a toolchain problem — GitHub
+     Actions' own network won't have the same issue.
+   - **Linux**: `depends/hosts/linux.mk` expects a pre-installed
+     `x86_64-pc-linux-gnu` cross-compiler on `PATH` (matching Ubuntu's
+     `apt-get install g++` pattern in `build.yml`'s CI matrix); it does not
+     build one from scratch, and none is available via Homebrew in a
+     supported form. The standard way to produce Linux binaries from a
+     macOS host is Docker or a Linux VM, neither available this session
+     (see the same limitation noted for Phase 2's Docker Compose
+     environment).
+
+   Net effect: `.github/workflows/release.yml` is real, reviewed
+   configuration that reuses an already-proven CI matrix, but it has not
+   been run end-to-end (needs an actual GitHub Actions run against a
+   pushed tag to fully verify) — the macOS leg is the only one locally
+   built and verified.
+
+---
+
+## 10. Desktop build signing/notarization (Phase 3, still open)
+
+None of the three platforms' build artifacts are signed. This project has
+no code-signing certificates (Apple Developer ID, a Windows Authenticode
+cert), so this is a real TODO, not an oversight:
+
+- **macOS**: `contrib/macdeploy/build_dmg.sh` prints the exact
+  `codesign`/`notarytool`/`stapler` commands needed, once a Developer ID
+  Application certificate exists. Unsigned, the `.dmg` will trigger
+  Gatekeeper's "unidentified developer" warning on first launch.
+- **Windows**: `.github/workflows/release.yml`'s Windows job has a TODO
+  comment with the `osslsigncode` invocation needed once an Authenticode
+  certificate exists. Unsigned, the installer will trigger SmartScreen
+  warnings.
+- **Linux**: `.deb` packages are conventionally signed via a GPG-signed
+  `Release` file at the *repository* level (e.g. an APT repo), not
+  per-package — not applicable until there's an actual package repository
+  to publish to.
