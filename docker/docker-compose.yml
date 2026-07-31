@@ -1,0 +1,121 @@
+# CodexaCoin 3-node regtest network.
+#
+# Brings up three independent codexacoind regtest nodes on a private
+# Docker network, connected to each other, plus a one-shot `init` service
+# that mines the premine window on node0, verifies the audit script, checks
+# PoW is rejected post-window, and confirms PoS staking propagates
+# network-wide. See PARAMETERS.md section 5/6 for what's actually being
+# exercised here, and ../codexacoin-core/test/functional/feature_premine.py
+# / feature_coinage_reward.py / feature_pos_reorg.py for the equivalent
+# automated (non-Docker) coverage of the same behavior.
+#
+# RPC credentials below (cacdevRPC/cacdevRPCpass) are fixed, regtest-only,
+# throwaway development credentials -- NOT for testnet/mainnet use. They
+# exist purely so the `init` container (which doesn't share any node's
+# private data volume, so can't read a cookie file) can authenticate
+# against all three nodes without volume-sharing gymnastics. Never reuse
+# these for a real network.
+#
+# Usage:
+#   docker compose up -d node0 node1 node2   # bring up the 3-node network
+#   docker compose run --rm init             # mine premine, verify, exercise staking
+#   docker compose logs -f node0             # watch a node
+#   docker compose down -v                   # tear down + wipe chain state
+
+x-node-common: &node-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  networks:
+    - cacnet
+  environment:
+    &node-env
+    RPC_USER: cacdevRPC
+    RPC_PASS: cacdevRPCpass
+
+services:
+  node0:
+    <<: *node-common
+    hostname: node0
+    command:
+      - -regtest
+      - -printtoconsole
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -rpcuser=cacdevRPC
+      - -rpcpassword=cacdevRPCpass
+      - -server
+      - -listen
+      - -staking=1
+      - -addnode=node1
+      - -addnode=node2
+    ports:
+      - "36211:36211" # host access for manual RPC/CLI debugging only
+    volumes:
+      - node0-data:/home/codexacoin/.codexacoin
+
+  node1:
+    <<: *node-common
+    hostname: node1
+    command:
+      - -regtest
+      - -printtoconsole
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -rpcuser=cacdevRPC
+      - -rpcpassword=cacdevRPCpass
+      - -server
+      - -listen
+      - -staking=1
+      - -addnode=node0
+      - -addnode=node2
+    volumes:
+      - node1-data:/home/codexacoin/.codexacoin
+
+  node2:
+    <<: *node-common
+    hostname: node2
+    command:
+      - -regtest
+      - -printtoconsole
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -rpcuser=cacdevRPC
+      - -rpcpassword=cacdevRPCpass
+      - -server
+      - -listen
+      - -staking=1
+      - -addnode=node0
+      - -addnode=node1
+    volumes:
+      - node2-data:/home/codexacoin/.codexacoin
+
+  # One-shot: not started by `docker compose up`. Run explicitly with
+  # `docker compose run --rm init` once node0/1/2 are up and have had a
+  # few seconds to peer with each other.
+  init:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: init
+    networks:
+      - cacnet
+    environment:
+      <<: *node-env
+    depends_on:
+      - node0
+      - node1
+      - node2
+    entrypoint: ["/bin/sh", "/init/init-premine.sh"]
+    volumes:
+      - ./scripts:/init:ro
+      - ../codexacoin-core/scripts:/audit:ro
+
+networks:
+  cacnet:
+    driver: bridge
+
+volumes:
+  node0-data:
+  node1-data:
+  node2-data:
