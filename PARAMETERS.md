@@ -239,6 +239,91 @@ spec's Appendix A.5 test suite (unit tests for overflow edge cases, the
 full-year calibration simulation, the age-cap test, the kernel-independence
 statistical test, and the 6B negative test are all still TODO — see §9).
 
+### 6.2 Operational note: staking pauses after a rapid bulk-mine
+
+Discovered during Phase 2 while automating the above verification as a
+functional test. Mining the 500-block premine window via `generatetoaddress`
+takes only ~60-90 seconds of *real* wall-clock time, but each block's
+timestamp must still increase by at least one second — so the chain's clock
+advances ~500 seconds while real time advances ~65. The result: immediately
+after a rapid bulk-mine, the chain's `median-time-past` sits several minutes
+*ahead* of real time.
+
+`node/miner.cpp`'s PoS path correctly refuses to timestamp a new block
+earlier than `pindexPrev->GetMedianTimePast()+1` (a legitimate consensus
+safety rule, unrelated to and unmodified by CodexaCoin's changes). The
+practical effect: staking will appear completely idle — not hung, RPC stays
+fully responsive throughout, kernels are still found and logged every
+`search-interval` — until real wall-clock time catches up to the chain's
+temporarily-future-shifted clock. Measured this session: a ~345-second gap
+after mining 500 blocks in ~65 seconds, closing 1:1 with elapsed real time.
+
+**This is expected and requires no code fix**, but matters operationally:
+anyone bulk-mining a premine window on a fresh regtest/testnet node (Docker
+Compose environments, CI, this project's own functional tests) should expect
+a multi-minute pause before staking visibly starts, and should not mistake
+it for a hang. The functional tests added this phase
+(`feature_coinage_reward.py`, `feature_pos_reorg.py`) use a 600-900 second
+`wait_until` timeout to account for it.
+
+### 6.3 Two real reward-timing bugs found and fixed (Phase 2)
+
+Both were caught specifically because Phase 2's functional tests exercise
+scenarios Phase 1's single-node, self-mined-coins-only verification never
+did: a node *receiving* coins from elsewhere (not self-mining them), and
+two independently-staking nodes reconnecting and needing to agree on each
+other's blocks. Both are now fixed and re-verified exact-to-the-satoshi
+(§6.1's numbers above are from the corrected code).
+
+**Bug 1 — wallet read a transaction field that's always zero.**
+`CTransaction` only serializes `nTime` for `nVersion<2`
+(`primitives/transaction.h`); for this codebase's `nVersion=2` transactions
+it deserializes as a hardcoded `0`. `wallet/staking.cpp`'s coin-age
+calculation was reading `pcoin.first->tx->nTime` directly as each input's
+origin timestamp. For self-mined coins staked within the same process
+(Phase 1's only test scenario) this coincidentally held a valid in-memory
+value and never showed up. The moment a wallet staked a *received*
+transaction, `nTime` read back as `0`, making `age = current_time − 0` ≈ the
+full Unix timestamp, clamped to `AGE_CAP_SECONDS` (60 days) — inflating a
+single coinstake's reward by **~21,600×**. `ConnectBlock` correctly
+rejected every such block (`bad-cs-amount`), so no bad block was ever
+accepted, but the wallet could never construct a valid coinstake from
+received funds at all.
+
+**Bug 2 — the fallback used a value that isn't canonical across nodes.**
+The first fix mirrored `pos.cpp`'s existing kernel-hash fallback pattern
+(`Coin.nTime` if set, else the origin block's time) — reasonable-looking,
+but wrong for reward purposes specifically. `Coin.nTime` is populated from
+whatever a transaction's in-memory `nTime` happened to be *when that node's
+own `ConnectBlock` ran* — nonzero (the original construction-time value) if
+that node mined the block itself, `0` (falling back to block time) if it
+instead received the block over P2P. Since `node/miner.cpp` sets a PoW
+block's final `nTime` via `std::max(pindexPrev->GetMedianTimePast()+1,
+...)` *after* the coinbase transaction object already self-initialized its
+own `nTime` at construction, those two values can differ by a few seconds.
+Net effect: two nodes could compute two *different* maximum-allowed
+rewards for the identical coinstake, purely depending on which one mined
+the input being spent — and a receiving node could reject a
+perfectly-honest block the originating node considered valid. Reproduced
+live this session: `node1` rejected `node0`'s own correctly-constructed
+block with `coinstake pays too much (actual=6202545797 vs
+limit=6081165253)`, a ~2% mismatch, immediately after the two nodes
+reconnected following an independent-staking test.
+
+**Fix:** both `pos.cpp::GetCoinstakeMaxReward` (consensus) and
+`wallet/staking.cpp::GetWalletTxOriginTime` (wallet) now resolve origin
+time via *only* the origin/confirming block's own canonical header time —
+identical on every node that has that block, regardless of whether they
+mined it or synced it. Never `Coin.nTime`, never `tx->nTime` directly,
+never wallet-local metadata like `nTimeReceived` (which depends on when
+*that specific node* happened to see the transaction). This is deliberately
+a narrower, more conservative resolution than the kernel-hash code's own
+`Coin.nTime`-if-set fallback — that fallback is fine for kernel-hash
+scrambling (not consensus-critical, doesn't gate validity across nodes) but
+was never safe for a reward *amount* every node must agree on
+byte-for-byte, which the kernel-weight code never needed to do since kernel
+weight is amount-only (unaffected by any of this).
+
 ---
 
 ## 7. Supply ceiling — `MAX_MONEY` and the `int64` `CAmount` constraint
