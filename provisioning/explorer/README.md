@@ -45,18 +45,31 @@ separate, lower-trust service in the first place).
   `API_BASE` defaults to same-origin `/api/...`, so this needed no code
   changes at all.
 
-## Known limitation: no real P2P sync yet
+## P2P sync (fixed, was briefly a real config footgun)
 
-See `PARAMETERS.md` section 9 item 10. Outbound P2P connections
-(`addnode`, either over RPC or via config) never actually attempt a
-connection on this codebase, for reasons not yet root-caused — confirmed
-it isn't a network/firewall issue (raw sockets connect fine between the
-same two hosts). Until that's fixed, this VPS node was bootstrapped with
-a one-time copy of `blocks/`+`chainstate/` from the Mac's node (500KB-scale
-chain, trivial to copy) rather than a real sync. `cac-resync.sh` in this
-directory is the same operation as a re-runnable script, for whenever the
-explorer's data needs refreshing — not automated via cron, since it's a
-workaround, not the intended design.
+This node was initially bootstrapped with a one-time manual copy of
+`blocks/`+`chainstate/` from the Mac's node, because P2P connections
+between the two appeared completely broken — every attempt vanished with
+no trace, looking exactly like a bug in the codebase's connection code.
+
+It wasn't. See `PARAMETERS.md` section 9 item 10 for the full trail
+(`-debug=net`, `tcpdump`, `strace` on the live process), but the short
+version: this VPS's `codexacoind` had `maxconnections=8` set during
+initial provisioning, and Bitcoin Core reserves outbound connection slots
+*before* counting inbound capacity — at `maxconnections=8`, the
+outbound-full-relay reservation alone (`min(16, 8) = 8`) consumed every
+slot, leaving exactly zero for inbound. Every connection attempt was
+silently dropped as "full," and the log line that would have explained
+why was itself gated behind a debug category that wasn't enabled. Fixed
+by removing the `maxconnections` override — don't set it below roughly
+20 on a node that needs to accept inbound connections, or do the same
+slot math first if you must.
+
+Real P2P sync works correctly now, verified both directions
+(`getpeerinfo` shows each node as a peer of the other). `cac-resync.sh`
+in this directory is no longer needed for ongoing sync — kept only as an
+optional fast-bootstrap tool for spinning up a brand-new node without
+waiting on P2P from scratch.
 
 ## Verified
 

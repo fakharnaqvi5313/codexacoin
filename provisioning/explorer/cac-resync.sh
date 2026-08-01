@@ -1,17 +1,14 @@
 #!/bin/bash
-# TEMPORARY stopgap: codexacoind's outbound addnode/P2P connection
-# machinery isn't actually attempting connections (confirmed: OS-level
-# networking is fine -- raw socket connects instantly -- but neither
-# `addnode ... onetry` nor a config-level addnode= ever produces a
-# connection attempt in debug.log, on either side of the connection).
-# That's a real bug in this codebase's connection-management code, not
-# specific to this deployment -- see PARAMETERS.md section 9 item 10.
-# Until it's fixed, this VPS node can't sync via real P2P, so this
-# script periodically re-copies blocks/chainstate from a source node
-# that does have the current chain instead. Remove this once P2P sync
-# actually works -- it is a workaround, not the intended design (see
-# ../../PARAMETERS.md section 13.1 for the intended trust-boundary
-# reasoning, which assumes a real P2P-synced node).
+# NO LONGER NEEDED FOR ONGOING SYNC -- P2P sync works correctly once
+# codexacoind actually has inbound connection capacity (see
+# PARAMETERS.md section 9 item 10: a `maxconnections=8` misconfiguration
+# during initial provisioning reserved every slot for outbound and left
+# zero for inbound, which looked exactly like a connection-code bug
+# until traced with strace). Kept only as an optional fast-bootstrap
+# tool: copying blocks/+chainstate/ directly is faster than waiting on
+# P2P IBD when spinning up a brand-new node, especially for a small
+# chain. Not automated via cron -- a real node should just stay synced
+# via normal P2P.
 #
 # Usage: run on the explorer's node host, with SSH access configured to
 # a source node that has the current chain:

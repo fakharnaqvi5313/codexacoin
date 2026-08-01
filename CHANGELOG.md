@@ -637,6 +637,43 @@ above.
 
 ---
 
+## Deployed the block explorer, then root-caused its P2P connectivity
+
+### 2026-08-01
+
+- **Block explorer deployed** to
+  [codexacoin.com/blockexplorer](https://codexacoin.com/blockexplorer/),
+  backed by its own headless `codexacoind` (no wallet, no keys) built
+  from source on the VPS, since no Linux binary existed anywhere in this
+  project yet. See `provisioning/explorer/README.md`.
+- **A genuine repo gap found and fixed while building it**:
+  `src/qt/Makefile`, `src/test/Makefile`, and `src/qt/test/Makefile` had
+  never been committed to git since the original Phase 1 fork import —
+  plain, hand-written pass-through Makefiles, invisible locally because
+  macOS builds never re-run `autoreconf` and just reuse whatever
+  `Makefile` is already sitting in the working tree. A clean checkout
+  hits it immediately. Fixed by committing the three files.
+- **P2P connectivity between the Mac's node and the VPS's node
+  investigated and fixed.** Initially looked like a real bug in the
+  codebase's connection-management code — every connection attempt
+  seemed to vanish with no trace at all. Turned out to be a
+  self-inflicted VPS configuration mistake, not a code bug: an arbitrary
+  `maxconnections=8` set during initial provisioning caused Bitcoin
+  Core's outbound-slot-reservation math to consume all 8 slots for
+  outbound alone, leaving zero capacity for inbound connections — every
+  inbound attempt was silently dropped as "full," and the actual log
+  line explaining why was itself gated behind a debug category that
+  wasn't enabled on the VPS side, which is what made it look like a
+  silent, unexplained failure at first. Root-caused with `-debug=net`,
+  `tcpdump`, and `strace` attached to the live process — the smoking gun
+  was `accept() → setsockopt(TCP_NODELAY) → close()` with no `recv`/`read`
+  ever called. Fixed by removing the `maxconnections` override (no code
+  changes needed); verified immediately after with a full real-P2P sync
+  and both nodes showing each other in `getpeerinfo`. See `PARAMETERS.md`
+  §9 item 10 for the full diagnostic trail.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

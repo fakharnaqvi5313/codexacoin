@@ -580,26 +580,47 @@ the daemon has been run against them (see §6.1).
    been run end-to-end (needs an actual GitHub Actions run against a
    pushed tag to fully verify) — the macOS leg is the only one locally
    built and verified.
-10. **Investigate: outbound P2P connections never actually attempt,**
-    found while deploying the block explorer (2026-08-01) and not yet
-    root-caused. Neither `addnode <ip:port> onetry` over RPC nor a
-    config-level `addnode=` (checked at startup, confirmed parsed —
-    "Config file arg: addnode=..." appears in `debug.log`) ever produces
-    a connection attempt: no matching log line, `getpeerinfo` never shows
-    an outbound entry, `getnetworkinfo` stays at `connections_out: 0`
-    indefinitely. Confirmed this isn't an environment/network problem —
-    a raw Python socket and `nc` both connect to the target instantly
-    from the same machine, and the target was independently confirmed
-    listening publicly (`ss -tlnp` showed `0.0.0.0:16210`). This points
-    at `CConnman`'s own connection-management code (`ThreadOpenAddedConnections`
-    or similar) rather than anything host-specific, but wasn't dug into
-    further this session — the explorer deployment worked around it with
-    a manual/periodic `blocks/`+`chainstate/` copy instead (see
-    `provisioning/explorer/README.md`) rather than blocking on a fix. A
-    node genuinely unable to make outbound connections is a real problem
-    for eventual public launch (every node would need a `-connect=` or
-    to only ever receive inbound), so this needs a proper fix before
-    §9 item 6's DNS seeds would even be useful.
+10. ~~Investigate: P2P connections between the Mac's node and the VPS's
+    explorer-support node never succeeded~~ — **root-caused and fixed
+    2026-08-01, no code changes needed.** Initially looked like a
+    codebase bug in `CConnman` (every connection attempt appeared to
+    vanish with no log trace at all, from either RPC `addnode ... onetry`
+    or a config-level `addnode=`), but that first read was wrong — a
+    proper investigation (`-debug=net`, `tcpdump` on the VPS, `strace`
+    attached to the live `codexacoind` process) traced it to a single
+    line: `strace` showed every inbound connection going
+    `accept() → setsockopt(TCP_NODELAY) → close()`, with no `recv`/`read`
+    ever called, explaining both the silent kernel-level RST (a `close()`
+    with unread data in the receive buffer does that) and the total
+    absence of any log line (the actual rejection reason,
+    `CreateNodeFromAcceptedSocket`'s "connection dropped (full)", is
+    itself gated behind the `net` debug category, which wasn't enabled on
+    the VPS side during the original attempts).
+
+    The real cause: the VPS's `codexacoind` was configured with
+    `maxconnections=8` (an arbitrary value chosen during initial
+    provisioning, not a deliberate limit). Bitcoin Core's connection-slot
+    math reserves outbound capacity *first* —
+    `m_max_outbound_full_relay = min(MAX_OUTBOUND_FULL_RELAY_CONNECTIONS
+    (16), nMaxConnections)` — so at `nMaxConnections=8` that reservation
+    alone consumes all 8 slots, leaving
+    `nMaxInbound = nMaxConnections - m_max_outbound = 8 - 8 = 0`. Every
+    single inbound connection then hit `nInbound >= nMaxInbound` (`0 >=
+    0`), found nothing to evict, and got dropped — deterministically,
+    every time, which is exactly what was observed. **Fix**: removed the
+    `maxconnections=8` override from the VPS's `codexacoin.conf`
+    entirely (falls back to the default of 125, which reserves outbound
+    slots the same way but leaves well over 100 free for inbound).
+    Verified immediately after restarting: a fresh isolated test node
+    connected via real P2P and did a full sync of all 521 blocks, and
+    both the Mac's persistent node and the VPS's persistent node now show
+    each other in `getpeerinfo` (`manual` outbound from the Mac,
+    `inbound` on the VPS). The manual `blocks/`+`chainstate/` copy
+    workaround (`provisioning/explorer/cac-resync.sh`) is no longer
+    needed for ongoing sync as a result — kept only as a fast-bootstrap
+    option for spinning up a brand-new node. See
+    `provisioning/explorer/README.md` for the full writeup and the
+    `-debug=net`/`tcpdump`/`strace` diagnostic trail.
 
 ---
 
