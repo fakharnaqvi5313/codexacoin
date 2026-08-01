@@ -797,6 +797,31 @@ above.
 
 ---
 
+## Dedicated BIP32 extended-key version bytes
+
+### 2026-08-02
+
+- `kernel/chainparams.cpp`: all four networks (mainnet, testnet, signet,
+  regtest) previously reused Bitcoin's own `EXT_PUBLIC_KEY`/`EXT_SECRET_KEY`
+  version bytes verbatim, so `dumpwallet`/`listdescriptors` output started
+  with Bitcoin's literal "xpub"/"xprv" -- indistinguishable at a glance from
+  a real Bitcoin extended key. Chose CodexaCoin-specific bytes instead:
+  mainnet extended keys now start `Czxx...`, testnet/signet/regtest start
+  `DDxx...`. Not consensus-critical (display-only, no validation logic
+  touches this), not a breaking change (no UI in this project currently
+  serializes an extended key; old backup files stay valid regardless).
+- Live-verified against a real, freshly-built `codexacoind`: created a
+  descriptor wallet on an isolated mainnet node and confirmed
+  `listdescriptors` actually returns the new `Czxx...`-prefixed extended
+  pubkey, then repeated on regtest for the `DDxx...` family. See
+  `PARAMETERS.md` section 6.4 for the full writeup, including why the
+  `EXT_SECRET_KEY`/`dumpwallet` side couldn't be independently re-verified
+  live in this build (no BDB/legacy wallet support) despite using the
+  identical, already-verified encoding mechanism.
+- Closes `PARAMETERS.md` section 9 item 5.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

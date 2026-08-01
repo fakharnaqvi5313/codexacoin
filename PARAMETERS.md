@@ -494,6 +494,59 @@ established chains. Lowering it now, while stake is maximally
 concentrated, would be lowering the network's security at exactly the
 wrong time.
 
+### 6.4 BIP32 extended-key version bytes (added 2026-08-02)
+
+Every network in `kernel/chainparams.cpp` reused Bitcoin's own
+`EXT_PUBLIC_KEY`/`EXT_SECRET_KEY` version bytes verbatim
+(`0x0488B21E`/`0x0488ADE4` mainnet, `0x043587CF`/`0x04358394` testnet) up
+until this change — meaning `dumpwallet` and `listdescriptors` produced
+strings starting with Bitcoin's own literal "xpub"/"xprv", indistinguishable
+at a glance from a real Bitcoin extended key. Not consensus-critical (this
+only affects how a wallet backup file or descriptor string displays, never
+validation), but confusing and worth fixing before anyone relies on a backup
+file for real.
+
+There's no central registry for this the way SLIP-44 governs BIP44 coin
+types (§9 item 4) — altcoins pick their own version bytes independently and
+collisions are tolerated (the underlying key material and network context
+are what actually matter, not the display prefix). Chose new 4-byte values
+via a brute-force search over candidate bytes, serializing realistic
+extended-key payloads (varying depth 0-5, fingerprint, child number, and key
+material per BIP44-style derivation) and keeping only candidates whose
+resulting base58 string prefix was stable across many random trials — the
+same technique other projects used originally to land on "xpub"/"tpub"/etc.
+Confirmed the chosen bytes don't collide with Bitcoin's own four well-known
+values.
+
+| Network | `EXT_PUBLIC_KEY` | `EXT_SECRET_KEY` |
+|---|---|---|
+| Mainnet | `0x38 0x86 0x00 0x00` | `0x38 0x84 0x00 0x00` |
+| Testnet/Signet/Regtest (shared) | `0x39 0x86 0x00 0x00` | `0x39 0x84 0x00 0x00` |
+
+**Live-verified**, not just simulated: rebuilt `codexacoind`/`codexacoin-cli`,
+ran an isolated real mainnet node (`-connect=0 -listen=0 -dnsseed=0`, no
+chain sync needed since this only affects fresh wallet key derivation),
+created a descriptor wallet, and confirmed `listdescriptors` returns
+extended pubkeys starting `CzsJd1...` — e.g.
+`pkh(CzsJd1UEME6DE59E4ta8iCrzW7uFGzLU8Hpy4UkahVa8reqJ7MykU5B5jKGLRrPNXKUdvfsxVtsdxPr1rji1VHeeTnzsRgiDcFZUagbsJ5iBrvj7/44h/10h/0h/0/*)`.
+Repeated on regtest (shares the non-mainnet bytes) and got `DDBSyy...` —
+also confirmed live. `dumpwallet`'s extended-*private*-key line
+(`EXT_SECRET_KEY`) uses the exact same `EncodeBase58Check` mechanism just
+verified for the public side, but couldn't be independently re-run live in
+this same session: `dumpwallet` requires a legacy (BDB) wallet, and this
+build's `codexacoind` has no BDB support (this project standardized on
+descriptor/SQLite wallets everywhere — mobile, gateway, staking pool).
+Byte values for both `EXT_PUBLIC_KEY` and `EXT_SECRET_KEY` are confirmed
+correct by direct inspection of `chainparams.cpp` across all four network
+blocks either way.
+
+Not a breaking change for anything already deployed: nothing in
+`mobile-wallet/` or `web-wallet/` ever serializes/displays an extended key
+(both use raw private/public key bytes only, confirmed by inspection), and
+any *already-taken* `dumpwallet` backup file remains fully valid and
+importable regardless of this change — only the string *prefix* of newly
+generated backups differs going forward.
+
 ---
 
 ## 7. Supply ceiling — `MAX_MONEY` and the `int64` `CAmount` constraint
@@ -591,8 +644,8 @@ the daemon has been run against them (see §6.1).
    See §6.1a.
 4. Register (or at minimum re-verify non-collision of) BIP44 coin type `3377`
    against the live SLIP-44 registry.
-5. Choose dedicated BIP32 xpub/xprv version bytes instead of reusing Bitcoin's
-   (not consensus-critical, cosmetic/compatibility only).
+5. ~~Choose dedicated BIP32 xpub/xprv version bytes instead of reusing
+   Bitcoin's~~ — **done 2026-08-02**, see §6.4.
 6. Stand up real DNS seed hostnames (`seed1.codexacoin.example` etc. are
    placeholders in `kernel/chainparams.cpp`).
 7. ~~Build the Qt desktop wallet~~ — **done in Phase 2/3**: `qt@5` was built
