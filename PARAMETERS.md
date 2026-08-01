@@ -634,6 +634,11 @@ cert), so this is a real TODO, not an oversight:
   `codesign`/`notarytool`/`stapler` commands needed, once a Developer ID
   Application certificate exists. Unsigned, the `.dmg` will trigger
   Gatekeeper's "unidentified developer" warning on first launch.
+  Published anyway at `codexacoin.com/downloads/CodexaCoin-Core-macOS.dmg`
+  (2026-08-01) — the site says plainly that it's unsigned and how to work
+  around Gatekeeper (right-click → Open) rather than hiding the
+  limitation. Still needs a real Developer ID before this is a
+  reasonable default download experience.
 - **Windows**: `.github/workflows/release.yml`'s Windows job has a TODO
   comment with the `osslsigncode` invocation needed once an Authenticode
   certificate exists. Unsigned, the installer will trigger SmartScreen
@@ -894,14 +899,19 @@ assumptions about this fork, or missing production-readiness pieces:
 
 ### 13.5 Open TODOs from this phase
 
-1. Stand up a real gateway + staking pool deployment on the actual VPS
-   infrastructure this is designed for (`provisioning/vps-gateway/`) —
-   verified locally against regtest and mainnet-without-real-staking
-   only.
+1. ~~Stand up a real gateway + staking pool deployment on the actual VPS
+   infrastructure this is designed for
+   (`provisioning/vps-gateway/`)~~ — **done 2026-08-01**, live at
+   `codexacoin.com/wallet/` with a real backend (real wallets, real
+   generated JWT secret). See `provisioning/vps-gateway/README.md` for
+   the full writeup.
 2. Partial-withdrawal accounting (§13.2's "known simplification" —
    `withdraw()` currently closes out a user's entire position at once).
-3. Tighten `GATEWAY_CORS_ORIGINS` from the development default (`*`) to
-   the real web wallet's origin before any production deployment.
+3. ~~Tighten `GATEWAY_CORS_ORIGINS` from the development default (`*`)
+   to the real web wallet's origin before any production
+   deployment~~ — **done 2026-08-01**, set to `https://codexacoin.com`
+   on the live deployment (doesn't affect the mobile app, which isn't
+   subject to browser CORS at all).
 4. Revisit the direct-RPC backend's scaling limitation (§13.1) once
    electrumx-cac's packaging issue is resolved on a real target VPS.
 

@@ -1,9 +1,13 @@
 import * as cac from "./crypto.js";
 import { Gateway, GatewayError } from "./gateway.js";
 
+// Production default: empty string, so Gateway's fetch(this.baseUrl + path)
+// calls resolve against the page's own origin (see explorer/app.js and
+// checkout-widget/checkout.js for the identical convention) -- override via
+// localStorage for local dev against a gateway on a different origin/port.
 const GATEWAY_URLS = {
-  mainnet: localStorage.getItem("cac_gateway_url_mainnet") || "http://127.0.0.1:8080",
-  testnet: localStorage.getItem("cac_gateway_url_testnet") || "http://127.0.0.1:8080",
+  mainnet: localStorage.getItem("cac_gateway_url_mainnet") || "",
+  testnet: localStorage.getItem("cac_gateway_url_testnet") || "",
 };
 const COIN = 100_000_000n;
 

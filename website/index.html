@@ -18,11 +18,13 @@
       <span class="brand-word">CodexaCoin</span>
     </a>
     <nav class="site-nav">
+      <a href="#wallets">Wallets</a>
       <a href="#about">About</a>
       <a href="#specs">Specs</a>
       <a href="#roadmap">Roadmap</a>
+      <a href="/blockexplorer/">Explorer</a>
     </nav>
-    <span class="badge">Pre-launch</span>
+    <span class="badge">Early access</span>
   </div>
 </header>
 
@@ -32,7 +34,42 @@
     <img src="/assets/logo-512.png" alt="CodexaCoin logo" class="hero-logo" />
     <h1>CodexaCoin</h1>
     <p class="hero-tag">A modern Proof-of-Stake cryptocurrency —<br class="br-mobile" /> mined transparently, verified rigorously.</p>
-    <p class="hero-status">🚧 Pre-launch: the founder premine window is mining live right now. No token sale, no exchange listing, no wallet download yet — this page will be updated the moment that changes.</p>
+    <p class="hero-status">✅ The founder premine window is complete and checkpointed — the chain is live and staking on mainnet right now. Wallets are available below. Still open before a formal public launch: DNS seeds, BIP44 registration, and Windows/Linux desktop builds — see the roadmap.</p>
+  </section>
+
+  <section id="wallets" class="section wrap">
+    <h2>Get a wallet</h2>
+    <div class="prose">
+      <p>
+        All three talk to the same live CodexaCoin mainnet. No token sale, no
+        exchange listing — these are wallets for a real, running chain, not a
+        pre-launch signup.
+      </p>
+    </div>
+    <div class="wallets-grid">
+      <div class="wallet-card">
+        <h3>Desktop (macOS)</h3>
+        <p>Full node + staking wallet, with a graphical interface.</p>
+        <a class="btn" href="/downloads/CodexaCoin-Core-macOS.dmg">Download .dmg</a>
+        <p class="wallet-note">Unsigned build (no Apple Developer ID yet) — macOS will warn it's from an unidentified developer. Right-click the app → Open to run it anyway.</p>
+      </div>
+      <div class="wallet-card">
+        <h3>Mobile (Android)</h3>
+        <p>Send, receive, and track staking status from your phone.</p>
+        <a class="btn" href="/downloads/CodexaCoin-android.apk">Download .apk</a>
+        <p class="wallet-note">Direct install, not on the Play Store yet — you'll need to allow installs from unknown sources.</p>
+      </div>
+      <div class="wallet-card">
+        <h3>Web wallet</h3>
+        <p>No install — send, receive, and stake from any browser.</p>
+        <a class="btn" href="/wallet/">Open web wallet</a>
+        <p class="wallet-note">Custodial: the staking pool holds keys for pooled staking. See the wallet's own docs for what that means.</p>
+      </div>
+    </div>
+    <p class="specs-note">
+      iOS and Windows/Linux desktop builds aren't available yet — see the
+      roadmap below.
+    </p>
   </section>
 
   <section id="about" class="section wrap">
@@ -87,8 +124,9 @@
       <li class="done"><span class="rm-num">5</span><div><h3>Mobile wallets</h3><p>Send/receive, staking status, verified on Android.</p></div></li>
       <li class="done"><span class="rm-num">6</span><div><h3>Staking service &amp; web wallet</h3><p>Custodial staking pool and browser-based wallet, verified against a real node.</p></div></li>
       <li class="done"><span class="rm-num">7</span><div><h3>Explorer &amp; launch readiness</h3><p>Public block explorer, multisig support, merchant checkout widget, this site.</p></div></li>
-      <li class="active"><span class="rm-num">•</span><div><h3>Founder premine mining</h3><p>In progress right now — 500 blocks, mined transparently and auditable on-chain.</p></div></li>
-      <li class="upcoming"><span class="rm-num">→</span><div><h3>Public launch</h3><p>DNS seeds, checkpoints, and the first public release once the premine window closes.</p></div></li>
+      <li class="done"><span class="rm-num">8</span><div><h3>Founder premine mining</h3><p>Complete — all 500 blocks mined, audited exact, and checkpointed. The chain has been staking (Proof-of-Stake) ever since.</p></div></li>
+      <li class="done"><span class="rm-num">9</span><div><h3>Wallets live</h3><p>Desktop (macOS), Android, and web wallet all available now — see above.</p></div></li>
+      <li class="upcoming"><span class="rm-num">→</span><div><h3>Formal public launch</h3><p>Real DNS seed hostnames, BIP44 coin-type registration, and Windows/Linux desktop builds still to come.</p></div></li>
     </ol>
   </section>
 

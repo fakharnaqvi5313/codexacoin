@@ -674,6 +674,50 @@ above.
 
 ---
 
+## All three wallets live: desktop, Android, and web
+
+### 2026-08-01
+
+- **macOS desktop wallet published**: rebuilt `CodexaCoin-Core-macOS.dmg`
+  fresh (current binary, final logo/icon) and published it at
+  `codexacoin.com/downloads/`. Still unsigned/unnotarized (no Apple
+  Developer ID available in this environment, see `PARAMETERS.md` §10) —
+  the site says so plainly rather than hiding it.
+- **Android APK published**: built a real `--release` APK (not debug),
+  fixed the same Gradle/JDK-17 mismatch documented in `PARAMETERS.md`
+  §12.3, published at `codexacoin.com/downloads/`. Direct-install only,
+  not on the Play Store.
+- **Web wallet deployed for real**, with its own backend — this was the
+  bigger piece:
+  - Rebuilt the VPS's `codexacoind` with wallet support enabled
+    (the explorer's build had deliberately used `--disable-wallet`),
+    same binary now serving both the explorer and the gateway.
+  - Created real `gateway` (watch-only) and `stakingpool` (holds real
+    keys) wallets on it, matching the design in `PARAMETERS.md` §13.
+  - Deployed `vps-gateway/` as a systemd service
+    (`cac-gateway.service` + `cac-gateway-watcher.timer`), with a real,
+    freshly-generated `GATEWAY_JWT_SECRET` — not a placeholder.
+  - Deployed `web-wallet/`'s static frontend to `codexacoin.com/wallet/`.
+    Fixed its `GATEWAY_URLS` default, which had pointed at
+    `http://127.0.0.1:8080` (a local-dev-only value) instead of the
+    same-origin convention `explorer/app.js` and
+    `checkout-widget/checkout.js` already use — nginx proxies `/v1/` to
+    the gateway at the site root, same pattern as the explorer's `/api/`.
+  - **Verified live, not just "pages load"**: created a real wallet in
+    the browser (real BIP39 mnemonic, a real derived address confirmed
+    valid via the node's own `validateaddress`), confirmed its balance
+    query actually round-tripped through nginx → gateway → node RPC, and
+    exercised the staking-pool signup endpoint directly against the
+    production JWT secret (then removed the test account from the
+    database afterward).
+- **Website updated** to match reality: badge changed from "Pre-launch"
+  to "Early access," hero copy updated (premine complete, chain is
+  staking live), new "Get a wallet" section linking all three, and the
+  roadmap now shows the premine-mining and wallet-availability items as
+  done.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
