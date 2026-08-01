@@ -1,1 +1,19 @@
 .claude/
+
+# Real key material -- never commit (see vps-gateway/README.md's Web
+# Push section for how to generate a real one per deployment)
+vps-gateway/vapid_private*.pem
+
+# Flutter / Dart (cac_wallet/)
+cac_wallet/.dart_tool/
+cac_wallet/.flutter-plugins
+cac_wallet/.flutter-plugins-dependencies
+cac_wallet/.packages
+cac_wallet/build/
+cac_wallet/android/.gradle/
+cac_wallet/android/local.properties
+cac_wallet/ios/Flutter/ephemeral/
+cac_wallet/ios/Pods/
+cac_wallet/ios/.symlinks/
+cac_wallet/*.iml
+

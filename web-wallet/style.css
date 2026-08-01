@@ -1,0 +1,140 @@
+:root {
+  --gold: #f0c350;
+  --bg: #121016;
+  --bg-card: #1c1922;
+  --text: #ece7e0;
+  --text-dim: #9b93a3;
+  --danger: #e06666;
+  --ok: #6fcf97;
+  --border: #322c3a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 20px; color: var(--gold); }
+header .network-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+main { flex: 1; padding: 20px; }
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.balance {
+  text-align: center;
+  font-size: 36px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+.balance-sub { text-align: center; color: var(--text-dim); font-size: 13px; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 999px;
+  border: none;
+  padding: 12px 20px;
+  width: 100%;
+  margin-top: 8px;
+}
+button.primary { background: var(--gold); color: #201a08; font-weight: 600; }
+button.secondary { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
+button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, textarea {
+  font: inherit;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0d0b11;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+.tabbar {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+.tabbar button {
+  flex: 1;
+  background: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  padding: 14px 4px;
+  font-size: 12px;
+  margin: 0;
+}
+.tabbar button.active { color: var(--gold); }
+
+.error { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.notice { color: var(--text-dim); font-size: 13px; margin: 8px 0; }
+.success { color: var(--ok); font-size: 13px; margin: 8px 0; }
+
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
+
+.mnemonic-box {
+  background: #0d0b11;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.tx-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.tx-row:last-child { border-bottom: none; }
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+}

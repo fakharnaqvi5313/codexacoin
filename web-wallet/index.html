@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodexaCoin Web Wallet</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>CodexaCoin Wallet</h1>
+    <div class="network-badge" id="network-badge">mainnet</div>
+  </header>
+
+  <main>
+    <!-- Onboarding -->
+    <section class="screen active" id="screen-onboarding">
+      <div class="card">
+        <p>Create a new wallet or restore one from an existing recovery phrase.
+           Your key is generated and stored only in this browser -- see the
+           "Security note" at the bottom before using this with real funds.</p>
+        <button class="primary" id="btn-create-wallet">Create a new wallet</button>
+        <button class="secondary" id="btn-show-restore">Restore from recovery phrase</button>
+      </div>
+      <div class="card" id="restore-card" style="display:none">
+        <label class="field-label">Recovery phrase (12 words, space-separated)</label>
+        <textarea id="restore-mnemonic" rows="3"></textarea>
+        <button class="primary" id="btn-restore-confirm">Restore</button>
+        <div class="error" id="restore-error"></div>
+      </div>
+      <div class="card" id="new-mnemonic-card" style="display:none">
+        <p><strong>Write down these 12 words in order.</strong> Anyone with this
+           phrase can spend your funds. CodexaCoin cannot recover it for you.</p>
+        <div class="mnemonic-box mono" id="new-mnemonic"></div>
+        <label class="field-label"><input type="checkbox" id="confirm-written" /> I have written down my recovery phrase</label>
+        <button class="primary" id="btn-mnemonic-continue" disabled>Continue</button>
+      </div>
+      <div class="card">
+        <p class="notice">Security note: unlike the mobile app (which stores your
+           key in the OS Keychain/Keystore), this web wallet keeps your recovery
+           phrase in this browser's localStorage. That's meaningfully weaker
+           protection -- anyone with access to this browser profile, or a
+           malicious browser extension, can read it. Best used for testnet or
+           small amounts; the mobile app is the safer choice for real funds. See
+           README.md for the full reasoning.</p>
+      </div>
+    </section>
+
+    <!-- Home -->
+    <section class="screen" id="screen-home">
+      <div class="card">
+        <div class="balance" id="home-balance">0.00000000 CAC</div>
+        <div class="balance-sub" id="home-address"></div>
+      </div>
+      <div class="error" id="home-error"></div>
+    </section>
+
+    <!-- Send -->
+    <section class="screen" id="screen-send">
+      <div class="card">
+        <label class="field-label">Destination address</label>
+        <input id="send-address" placeholder="C..." />
+        <label class="field-label">Amount (CAC)</label>
+        <input id="send-amount" type="number" step="0.00000001" />
+        <button class="primary" id="btn-send-confirm">Send</button>
+        <div class="error" id="send-error"></div>
+        <div class="success" id="send-success"></div>
+      </div>
+    </section>
+
+    <!-- Receive -->
+    <section class="screen" id="screen-receive">
+      <div class="card">
+        <p class="field-label">Your receive address</p>
+        <p class="mono" id="receive-address"></p>
+        <button class="secondary" id="btn-copy-address">Copy address</button>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="screen" id="screen-history">
+      <div class="card" id="history-list">
+        <p class="notice">Loading...</p>
+      </div>
+    </section>
+
+    <!-- Staking -->
+    <section class="screen" id="screen-staking">
+      <div class="card" id="staking-auth-card">
+        <p class="notice">Sign in to the staking pool to deposit, withdraw, and
+           see accrued rewards.</p>
+        <label class="field-label">Email</label>
+        <input id="stake-email" type="email" />
+        <label class="field-label">Password</label>
+        <input id="stake-password" type="password" />
+        <div class="row">
+          <button class="primary" id="btn-stake-login">Log in</button>
+          <button class="secondary" id="btn-stake-signup">Sign up</button>
+        </div>
+        <div class="error" id="stake-auth-error"></div>
+      </div>
+      <div class="card" id="staking-status-card" style="display:none">
+        <div class="stat-row"><span>Delegated</span><span id="stat-delegated">0 CAC</span></div>
+        <div class="stat-row"><span>Accrued rewards</span><span id="stat-rewards">0 CAC</span></div>
+        <div class="stat-row"><span>Rate</span><span id="stat-rate">-</span></div>
+        <div class="stat-row"><span>Pool fee</span><span id="stat-fee">-</span></div>
+      </div>
+      <div class="card" id="push-card" style="display:none">
+        <p class="notice">Get a browser notification when a deposit is confirmed or a staking reward is credited.</p>
+        <button class="secondary" id="btn-enable-push">Enable notifications</button>
+        <div class="error" id="push-error"></div>
+        <div class="success" id="push-success"></div>
+      </div>
+      <div class="card" id="staking-actions-card" style="display:none">
+        <label class="field-label">Deposit amount (CAC)</label>
+        <input id="deposit-amount" type="number" step="0.00000001" />
+        <button class="primary" id="btn-stake-deposit">Get deposit address</button>
+        <div id="deposit-result" class="success mono"></div>
+        <hr style="border-color:var(--border);margin:16px 0" />
+        <label class="field-label">Withdraw amount (CAC)</label>
+        <input id="withdraw-amount" type="number" step="0.00000001" />
+        <label class="field-label">To address (your own wallet)</label>
+        <input id="withdraw-address" />
+        <button class="secondary" id="btn-stake-withdraw">Withdraw</button>
+        <div class="error" id="staking-action-error"></div>
+        <div class="success" id="staking-action-success"></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="screen" id="screen-settings">
+      <div class="card">
+        <label class="field-label">Network</label>
+        <div class="row">
+          <button class="secondary" id="btn-net-mainnet">Mainnet</button>
+          <button class="secondary" id="btn-net-testnet">Testnet</button>
+        </div>
+      </div>
+      <div class="card">
+        <button class="danger" id="btn-wipe-wallet">Wipe wallet</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar" style="display:none">
+    <button data-screen="home">Home</button>
+    <button data-screen="send">Send</button>
+    <button data-screen="receive">Receive</button>
+    <button data-screen="history">History</button>
+    <button data-screen="staking">Staking</button>
+    <button data-screen="settings">Settings</button>
+  </nav>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

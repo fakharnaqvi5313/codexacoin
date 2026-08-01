@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""CodexaCoin mobile/web gateway -- implements docs/mobile-api.md.
+
+Backend choice (see PARAMETERS.md section 13.1 for the full reasoning):
+this implementation queries codexacoind directly via RPC, using a
+dedicated watch-only wallet ("gateway" by default) that imports any
+address it's asked about on first use, rather than talking to
+electrumx-cac as mobile-api.md originally envisioned. mobile-api.md's own
+design explicitly treats the gateway's backend as an internal detail
+("backed internally by one or more electrumx-cac instances") -- the
+client-facing REST contract below is unchanged either way. This
+substitution was made because electrumx-cac's local verification
+remained blocked by a macOS-specific storage-backend packaging issue
+(see PARAMETERS.md section 11) that a real Linux VPS deployment
+shouldn't hit, but this phase needed something actually runnable and
+verifiable end-to-end right now. See README.md's "Known limitation"
+section before deploying this to a chain with real transaction history.
+
+Configuration is via environment variables (see README.md):
+    CAC_RPC_HOST, CAC_RPC_PORT, CAC_RPC_USER, CAC_RPC_PASSWORD
+    CAC_NETWORK              (default: mainnet)
+    GATEWAY_WATCH_WALLET     (default: gateway)
+    GATEWAY_JWT_SECRET       (generate a real one for prod)
+    GATEWAY_DB_PATH
+    GATEWAY_POOL_FEE_BP      (default: 500 = 5%, matches cac_wallet's placeholder)
+    GATEWAY_VAPID_PUBLIC_KEY / GATEWAY_VAPID_PRIVATE_KEY_PATH / GATEWAY_VAPID_SUBJECT
+                             (Web Push -- see push.py and README.md's "Web Push" section)
+
+Fee estimation (/v1/fee-estimate) uses the node's live mempoolminfee and
+mempool fullness as a heuristic -- see that endpoint's own comment for
+why this codebase can't do real estimatesmartfee-style calibration.
+"""
+import os
+import time
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+import auth
+import db
+import rpc
+import staking
+from rpc import RpcError
+
+COIN = 100_000_000
+NETWORK = os.environ.get("CAC_NETWORK", "mainnet")
+WATCH_WALLET = os.environ.get("GATEWAY_WATCH_WALLET", "gateway")
+FEE_RATE_SAT_VB = os.environ.get("GATEWAY_FEE_RATE_SAT_VB", "1000")
+
+app = Flask(__name__)
+# Web wallets (../web-wallet/) are, by definition, served from a different
+# origin than this API -- browsers block cross-origin fetch() without
+# this. Mobile apps (cac_wallet/) don't go through a browser so this has
+# no effect on them either way.
+CORS(app, resources={r"/v1/*": {"origins": os.environ.get("GATEWAY_CORS_ORIGINS", "*")}})
+limiter = Limiter(get_remote_address, app=app, default_limits=["120 per minute"], storage_uri="memory://")
+
+
+def error(code, message, status=400, details=None):
+    body = {"error": {"code": code, "message": message}}
+    if details:
+        body["error"]["details"] = details
+    return jsonify(body), status
+
+
+def require_auth():
+    """Returns (user_id, None) or (None, error_response)."""
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None, error("unauthorized", "Missing or malformed Authorization header", 401)
+    user_id = auth.verify_token(header[len("Bearer "):])
+    if user_id is None:
+        return None, error("unauthorized", "Invalid or expired token", 401)
+    return user_id, None
+
+
+def ensure_wallet_loaded():
+    """Idempotently ensures the gateway's watch-only wallet exists and is
+    loaded. Safe to call on every request that needs it -- cheap once the
+    wallet is already loaded (a single listwallets RPC round-trip).
+
+    Descriptor wallet (not legacy/BDB): this node has BDB wallet creation
+    disabled by default ("BDB wallet creation is deprecated", confirmed
+    empirically), so the legacy `importaddress` RPC -- which requires a
+    BDB wallet -- isn't an option without a deprecated-RPC flag. Using a
+    descriptor wallet + `importdescriptors` instead is the modern,
+    non-deprecated equivalent; see ensure_address_watched below."""
+    loaded = rpc.call("listwallets", wallet="")
+    if WATCH_WALLET in loaded:
+        return
+    try:
+        rpc.call("loadwallet", [WATCH_WALLET], wallet="")
+        return
+    except RpcError as e:
+        on_disk = {w["name"] for w in rpc.call("listwalletdir", wallet="")["wallets"]}
+        if WATCH_WALLET in on_disk:
+            # See staking.py's ensure_pool_wallet_loaded for why this is
+            # checked explicitly rather than falling through to
+            # createwallet (which would just fail confusingly instead).
+            raise RpcError(
+                e.code, f"Wallet '{WATCH_WALLET}' exists on disk but failed to load: {e.message}"
+            )
+    rpc.call("createwallet", [WATCH_WALLET, True, True, "", False, True], wallet="")  # disable_private_keys=True, descriptors=True
+
+
+def ensure_address_watched(address):
+    with db.db() as conn:
+        row = conn.execute("SELECT 1 FROM watched_addresses WHERE address = ?", (address,)).fetchone()
+        if row:
+            return
+    ensure_wallet_loaded()
+    # timestamp=0: rescan from genesis to pick up any history the address
+    # already has before the gateway first heard about it. Cheap on this
+    # project's current chain size -- see README.md's "Known limitation"
+    # section for why this doesn't scale to a mature mainnet without
+    # switching to an indexed backend (electrumx-cac).
+    info = rpc.call("getdescriptorinfo", [f"addr({address})"])
+    result = rpc.call(
+        "importdescriptors",
+        [[{"desc": info["descriptor"], "timestamp": 0, "watchonly": True, "label": address}]],
+        wallet=WATCH_WALLET,
+    )
+    if not result[0].get("success"):
+        raise RpcError(-1, f"importdescriptors failed: {result[0].get('error')}")
+    with db.db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO watched_addresses (address, imported_at) VALUES (?, ?)",
+            (address, db.now()),
+        )
+        conn.commit()
+
+
+def is_valid_address(address):
+    try:
+        result = rpc.call("validateaddress", [address])
+        return bool(result.get("isvalid"))
+    except RpcError:
+        return False
+
+
+# ---------------------------------------------------------------- section 1
+
+
+@app.route("/v1/network/status")
+def network_status():
+    try:
+        info = rpc.call("getblockchaininfo")
+    except RpcError as e:
+        return error("electrum-backend-unavailable", str(e), 502)
+    return jsonify({
+        "network": info["chain"],
+        "chain_height": info["blocks"],
+        "best_block_hash": info["bestblockhash"],
+        "backend": "rpc",  # deviation from spec's electrum_servers_* fields -- see module docstring
+        "backend_healthy": True,
+    })
+
+
+# ---------------------------------------------------------------- section 2
+
+
+@app.route("/v1/address/<address>/balance")
+@limiter.limit("60 per minute")
+def address_balance(address):
+    if not is_valid_address(address):
+        return error("invalid-address", "Not a valid CodexaCoin address", 400)
+    ensure_address_watched(address)
+    utxos = rpc.call(
+        "listunspent", [0, 9999999, [address], True], wallet=WATCH_WALLET
+    )
+    confirmed = sum(round(u["amount"] * COIN) for u in utxos if u["confirmations"] > 0)
+    unconfirmed = sum(round(u["amount"] * COIN) for u in utxos if u["confirmations"] == 0)
+    return jsonify({"address": address, "confirmed": str(confirmed), "unconfirmed": str(unconfirmed)})
+
+
+# ---------------------------------------------------------------- section 3
+
+
+@app.route("/v1/address/<address>/utxos")
+@limiter.limit("60 per minute")
+def address_utxos(address):
+    if not is_valid_address(address):
+        return error("invalid-address", "Not a valid CodexaCoin address", 400)
+    ensure_address_watched(address)
+    tip = rpc.call("getblockcount")
+    raw = rpc.call("listunspent", [0, 9999999, [address], True], wallet=WATCH_WALLET)
+    utxos = []
+    for u in raw:
+        confs = u["confirmations"]
+        height = (tip - confs + 1) if confs > 0 else None
+        utxos.append({
+            "txid": u["txid"],
+            "vout": u["vout"],
+            "value": str(round(u["amount"] * COIN)),
+            "height": height,
+            "confirmations": confs,
+        })
+    return jsonify({"address": address, "utxos": utxos})
+
+
+# ---------------------------------------------------------------- section 4
+
+
+@app.route("/v1/address/<address>/history")
+@limiter.limit("60 per minute")
+def address_history(address):
+    if not is_valid_address(address):
+        return error("invalid-address", "Not a valid CodexaCoin address", 400)
+    ensure_address_watched(address)
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except ValueError:
+        return error("invalid-address", "limit must be an integer", 400)  # reusing code; not address-specific but keeps error shape simple
+    before_height = request.args.get("before_height")
+    before_height = int(before_height) if before_height else None
+
+    raw = rpc.call("listtransactions", [address, max(limit * 2, 100), 0, True], wallet=WATCH_WALLET)
+    seen = set()
+    txs = []
+    for t in raw:
+        txid = t["txid"]
+        if txid in seen:
+            continue
+        seen.add(txid)
+        height = t.get("blockheight")
+        if before_height is not None and height is not None and height >= before_height:
+            continue
+        txs.append({"txid": txid, "height": height, "fee": None})
+    txs.sort(key=lambda t: (t["height"] is None, -(t["height"] or 0)))
+    has_more = len(txs) > limit
+    return jsonify({"address": address, "transactions": txs[:limit], "has_more": has_more})
+
+
+@app.route("/v1/tx/<txid>")
+def tx_detail(txid):
+    try:
+        tx = rpc.call("getrawtransaction", [txid, True])
+    except RpcError:
+        return error("not-found", "No such transaction", 404)
+
+    is_coinstake = (
+        len(tx["vin"]) > 0
+        and "coinbase" not in tx["vin"][0]
+        and len(tx["vout"]) >= 2
+        and float(tx["vout"][0]["value"]) == 0
+        and tx["vout"][0]["scriptPubKey"].get("hex", "") == ""
+    )
+    reward_satoshis = None
+    if is_coinstake:
+        out_total = sum(round(o["value"] * COIN) for o in tx["vout"])
+        in_total = 0
+        for vin in tx["vin"]:
+            prevtx = rpc.call("getrawtransaction", [vin["txid"], True])
+            in_total += round(prevtx["vout"][vin["vout"]]["value"] * COIN)
+        reward_satoshis = out_total - in_total
+
+    height = None
+    confirmations = tx.get("confirmations", 0)
+    if "blockhash" in tx:
+        block = rpc.call("getblock", [tx["blockhash"], 1])
+        height = block["height"]
+
+    return jsonify({
+        "txid": txid,
+        "height": height,
+        "confirmations": confirmations,
+        "is_coinstake": is_coinstake,
+        "reward_satoshis": str(reward_satoshis) if reward_satoshis is not None else None,
+        "vin": tx["vin"],
+        "vout": tx["vout"],
+    })
+
+
+@app.route("/v1/tx/broadcast", methods=["POST"])
+@limiter.limit("20 per minute")
+def broadcast():
+    body = request.get_json(silent=True) or {}
+    raw_hex = body.get("raw_tx_hex")
+    if not raw_hex:
+        return error("tx-rejected", "raw_tx_hex is required", 400)
+    try:
+        txid = rpc.call("sendrawtransaction", [raw_hex])
+    except RpcError as e:
+        return error("tx-rejected", e.message, 400)
+    return jsonify({"txid": txid})
+
+
+@app.route("/v1/fee-estimate")
+def fee_estimate():
+    # This Bitcoin-Core-derived codebase has no estimatesmartfee-style RPC
+    # (confirmed empirically: absent from `help` output), which normally
+    # calibrates against real confirmed-transaction fee/confirmation-time
+    # history. This chain has essentially no organic transaction volume
+    # yet (see PARAMETERS.md section 5 -- still inside the PoW founder
+    # premine window), so that kind of calibration isn't meaningful here
+    # regardless. What this DOES do, that a hardcoded constant didn't:
+    # use the node's own real mempoolminfee as the floor (confirmed via
+    # getmempoolinfo to be 100 sat/vB on this network, not the 1000 the
+    # old fixed default assumed -- a real, live value that can differ per
+    # network/node config, not something to hardcode), and scale up from
+    # there based on actual current mempool backlog relative to how many
+    # blocks the caller is willing to wait. Documented as a heuristic,
+    # not a real fee market simulation.
+    target = int(request.args.get("target_blocks", "6"))
+    if target < 1:
+        return error("invalid-request", "target_blocks must be >= 1")
+    try:
+        mempool = rpc.call("getmempoolinfo")
+    except RpcError as e:
+        return error("rpc-error", e.message, 502)
+
+    min_rate = max(1, round(mempool["mempoolminfee"] * COIN / 1000))  # BTC/kvB -> sat/vB
+    mempool_bytes = mempool["bytes"]
+    max_mempool_bytes = mempool["maxmempool"]
+    fullness = min(1.0, mempool_bytes / max_mempool_bytes) if max_mempool_bytes else 0.0
+
+    # Urgency multiplier: an empty/light mempool needs nothing above the
+    # floor regardless of target_blocks (nothing to compete with); a
+    # fuller mempool scales the multiplier up, more steeply the fewer
+    # blocks the caller is willing to wait for. Capped at 10x the floor
+    # so a congested mempool can't produce an unbounded fee suggestion.
+    urgency = 1.0 + fullness * (10.0 / target)
+    fee_rate = min(round(min_rate * urgency), min_rate * 10)
+
+    return jsonify({
+        "target_blocks": target,
+        "fee_rate_sat_per_vbyte": str(fee_rate),
+        "mempool_min_fee_sat_per_vbyte": str(min_rate),
+        "mempool_fullness": round(fullness, 4),
+    })
+
+
+# ---------------------------------------------------------- account signup
+
+
+@app.route("/v1/auth/signup", methods=["POST"])
+@limiter.limit("10 per hour")
+def signup():
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    if not email or "@" not in email or len(password) < 8:
+        return error("invalid-address", "Valid email and password (>=8 chars) required", 400)
+    with db.db() as conn:
+        existing = conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            return error("invalid-address", "An account with that email already exists", 409)
+        cur = conn.execute(
+            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+            (email, auth.hash_password(password), db.now()),
+        )
+        conn.commit()
+        user_id = cur.lastrowid
+    return jsonify({"token": auth.issue_token(user_id)})
+
+
+@app.route("/v1/auth/login", methods=["POST"])
+@limiter.limit("20 per hour")
+def login():
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    with db.db() as conn:
+        row = conn.execute("SELECT id, password_hash FROM users WHERE email = ?", (email,)).fetchone()
+    if not row or not auth.verify_password(password, row["password_hash"]):
+        return error("unauthorized", "Invalid email or password", 401)
+    return jsonify({"token": auth.issue_token(row["id"])})
+
+
+# --------------------------------------------------------------- section 5
+
+
+@app.route("/v1/push/vapid-public-key")
+def push_vapid_public_key():
+    key = os.environ.get("GATEWAY_VAPID_PUBLIC_KEY")
+    if not key:
+        return error("not-configured", "Push notifications are not configured on this server", 503)
+    return jsonify({"public_key": key})
+
+
+@app.route("/v1/push/subscribe", methods=["POST"])
+def push_subscribe():
+    user_id, err = require_auth()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    endpoint = body.get("endpoint")
+    keys = body.get("keys") or {}
+    p256dh, auth_key = keys.get("p256dh"), keys.get("auth")
+    if not endpoint or not p256dh or not auth_key:
+        return error("invalid-address", "endpoint and keys.p256dh/keys.auth are required", 400)
+    with db.db() as conn:
+        conn.execute(
+            "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth",
+            (user_id, endpoint, p256dh, auth_key, db.now()),
+        )
+        conn.commit()
+    return jsonify({"subscribed": True})
+
+
+@app.route("/v1/staking/status")
+def staking_status():
+    user_id, err = require_auth()
+    if err:
+        return err
+    return jsonify(staking.status_for_user(user_id))
+
+
+@app.route("/v1/staking/deposit", methods=["POST"])
+@limiter.limit("20 per hour")
+def staking_deposit():
+    user_id, err = require_auth()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    amount = body.get("amount")
+    if not amount:
+        return error("invalid-address", "amount is required", 400)
+    ensure_wallet_loaded()
+    deposit_address = staking.create_deposit(user_id)
+    return jsonify({"deposit_address": deposit_address, "amount": str(amount)})
+
+
+@app.route("/v1/staking/withdraw", methods=["POST"])
+@limiter.limit("20 per hour")
+def staking_withdraw():
+    user_id, err = require_auth()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    amount = body.get("amount")
+    to_address = body.get("to_address")
+    if not amount or not to_address:
+        return error("invalid-address", "amount and to_address are required", 400)
+    if not is_valid_address(to_address):
+        return error("invalid-address", "to_address is not a valid CodexaCoin address", 400)
+    try:
+        txid = staking.withdraw(user_id, int(amount), to_address)
+    except staking.StakingError as e:
+        return error(e.code, str(e), 400)
+    return jsonify({"txid": txid})
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return error("rate-limited", "Too many requests -- please slow down.", 429)
+
+
+if __name__ == "__main__":
+    db.init_db()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
+else:
+    db.init_db()
