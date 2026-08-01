@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CodexaCoin Checkout Widget Demo</title>
+<style>
+  body { background:#121016; color:#ece7e0; font-family:-apple-system,sans-serif; display:flex; flex-direction:column; align-items:center; padding:40px; }
+  #log { margin-top:20px; font-family:ui-monospace,monospace; font-size:12px; color:#9b93a3; max-width:400px; }
+</style>
+</head>
+<body>
+<h2>Example merchant checkout page</h2>
+<div id="checkout-container"></div>
+<div id="log"></div>
+<script type="module">
+  import { createCheckout } from "./checkout.js";
+  const log = document.getElementById("log");
+  function append(msg) { log.textContent += msg + "\n"; }
+
+  const params = new URLSearchParams(location.search);
+  const address = params.get("address");
+  const amount = params.get("amount") || "1";
+  const gatewayUrl = params.get("gateway") || "http://127.0.0.1:8080";
+
+  if (!address) {
+    document.getElementById("checkout-container").textContent = "Pass ?address=...&amount=...&gateway=... in the URL for this demo.";
+  } else {
+    createCheckout({
+      container: "checkout-container",
+      address,
+      amountCac: amount,
+      gatewayUrl,
+      pollIntervalMs: 3000,
+      onDetected: (info) => append(`onDetected fired: balance=${info.balance}`),
+      onError: (e) => append(`onError: ${e.message}`),
+    });
+    append(`Watching ${address} for +${amount} CAC...`);
+  }
+</script>
+</body>
+</html>
