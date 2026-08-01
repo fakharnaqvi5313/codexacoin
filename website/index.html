@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodexaCoin (CAC) — A modern Proof-of-Stake cryptocurrency</title>
+<meta name="description" content="CodexaCoin (CAC) is a Proof-of-Stake cryptocurrency: a short fixed founder-premine window, coin-age-proportional staking rewards, and a 64-second block target. Currently pre-launch." />
+<link rel="icon" href="/assets/favicon-32.png" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/logo.png" alt="" class="brand-mark" />
+      <span class="brand-word">CodexaCoin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="#about">About</a>
+      <a href="#specs">Specs</a>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+    <span class="badge">Pre-launch</span>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero wrap">
+    <img src="/assets/logo-512.png" alt="CodexaCoin logo" class="hero-logo" />
+    <h1>CodexaCoin</h1>
+    <p class="hero-tag">A modern Proof-of-Stake cryptocurrency —<br class="br-mobile" /> mined transparently, verified rigorously.</p>
+    <p class="hero-status">🚧 Pre-launch: the founder premine window is mining live right now. No token sale, no exchange listing, no wallet download yet — this page will be updated the moment that changes.</p>
+  </section>
+
+  <section id="about" class="section wrap">
+    <h2>What is CodexaCoin?</h2>
+    <div class="prose">
+      <p>
+        CodexaCoin (ticker <strong>CAC</strong>) is a Proof-of-Stake (PoS) cryptocurrency,
+        forked from the Blackcoin More codebase and rebuilt with its own consensus
+        parameters, staking-reward formula, and full application stack — desktop
+        wallet, mobile wallet, block explorer, and a custodial staking service.
+      </p>
+      <p>
+        Instead of ongoing energy-intensive mining, new blocks after the initial
+        founder-premine window are produced by <strong>staking</strong>: coin holders
+        who keep their wallet online periodically "mint" new blocks in proportion to
+        the coins they hold, and are rewarded for it. There's no ongoing hardware
+        arms race and no perpetual electricity cost per block.
+      </p>
+      <p>
+        The project is open source under the MIT license, inheriting its lineage
+        from Bitcoin Core, Peercoin, and Blackcoin.
+      </p>
+    </div>
+  </section>
+
+  <section id="specs" class="section wrap">
+    <h2>By the numbers</h2>
+    <div class="specs-grid">
+      <div class="spec"><span class="spec-label">Ticker</span><span class="spec-value">CAC</span></div>
+      <div class="spec"><span class="spec-label">Consensus</span><span class="spec-value">Proof-of-Stake (PoS v3)</span></div>
+      <div class="spec"><span class="spec-label">Launch mechanism</span><span class="spec-value">Fixed 500-block PoW founder premine, then PoS only</span></div>
+      <div class="spec"><span class="spec-label">Block target spacing</span><span class="spec-value">64 seconds</span></div>
+      <div class="spec"><span class="spec-label">Founder premine</span><span class="spec-value">14,000,000,000 CAC (500 × 28,000,000)</span></div>
+      <div class="spec"><span class="spec-label">Staking reward</span><span class="spec-value">Coin-age-proportional, ~13.68% simple annual (default; subject to calibration before mainnet freeze)</span></div>
+      <div class="spec"><span class="spec-label">Dev fund</span><span class="spec-value">None enabled</span></div>
+      <div class="spec"><span class="spec-label">License</span><span class="spec-value">MIT, fully open source</span></div>
+    </div>
+    <p class="specs-note">
+      Every one of these numbers is documented and versioned in the project's own
+      <code>PARAMETERS.md</code> alongside the reasoning behind it — nothing here is
+      marketing copy invented separately from the code.
+    </p>
+  </section>
+
+  <section id="roadmap" class="section wrap">
+    <h2>Roadmap</h2>
+    <ol class="roadmap">
+      <li class="done"><span class="rm-num">1</span><div><h3>Fork, rebrand &amp; reconfigure</h3><p>Consensus parameters, genesis, full rebrand from the upstream fork.</p></div></li>
+      <li class="done"><span class="rm-num">2</span><div><h3>Testnet &amp; regtest validation</h3><p>Multi-node staking, premine, and PoW-rejection verified end-to-end.</p></div></li>
+      <li class="done"><span class="rm-num">3</span><div><h3>Desktop wallets</h3><p>Qt wallet with staking controls; macOS build verified, Linux/Windows CI configured.</p></div></li>
+      <li class="done"><span class="rm-num">4</span><div><h3>Light-wallet backend</h3><p>Electrum-protocol server and mobile API gateway spec.</p></div></li>
+      <li class="done"><span class="rm-num">5</span><div><h3>Mobile wallets</h3><p>Send/receive, staking status, verified on Android.</p></div></li>
+      <li class="done"><span class="rm-num">6</span><div><h3>Staking service &amp; web wallet</h3><p>Custodial staking pool and browser-based wallet, verified against a real node.</p></div></li>
+      <li class="done"><span class="rm-num">7</span><div><h3>Explorer &amp; launch readiness</h3><p>Public block explorer, multisig support, merchant checkout widget, this site.</p></div></li>
+      <li class="active"><span class="rm-num">•</span><div><h3>Founder premine mining</h3><p>In progress right now — 500 blocks, mined transparently and auditable on-chain.</p></div></li>
+      <li class="upcoming"><span class="rm-num">→</span><div><h3>Public launch</h3><p>DNS seeds, checkpoints, and the first public release once the premine window closes.</p></div></li>
+    </ol>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>© 2026 CodexaCoin. Open source under the MIT license.</p>
+  </div>
+</footer>
+
+</body>
+</html>
