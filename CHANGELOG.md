@@ -768,6 +768,35 @@ above.
 
 ---
 
+## Appendix A.5 staking-reward unit test suite
+
+### 2026-08-02
+
+- `codexacoin-core/src/test/pos_tests.cpp` (new, registered in
+  `Makefile.test.include`): the formal unit test suite for
+  `ComputeCoinAgeReward`/`CheckStakeKernelHash` called for by the spec's
+  Appendix A.5, which had only ever been exercised via one real end-to-end
+  regtest run (`PARAMETERS.md` §6.1) until now. Seven cases: the known
+  regtest vector as a regression guard, zero/negative inputs, the age-cap
+  plateau, confirmation the 128-bit `arith_uint256` path is actually
+  exercised (not dead code) plus a forced-overflow test of the defensive
+  int64 clamp, a fast deterministic full-simulated-year calibration (lands
+  within 2 satoshis of the nominal annual rate on a 1,000,000 CAC input),
+  and a statistical test confirming PoS kernel eligibility stays amount-only
+  and uncorrelated with coin-age (3000 trials each at a 1-second vs.
+  55-day age, ~50% pass rate either way).
+- All seven cases pass under the project's real `make check` invocation.
+  Running the full `test_codexacoin` binary unfiltered (not how `make
+  check` actually works — each suite gets its own process) surfaces ~34
+  unrelated pre-existing failures elsewhere in the suite, traced to a
+  hardcoded 2020 mocktime being checked against the real system clock;
+  reproduces identically with `pos_tests` excluded, so it predates this
+  change and wasn't introduced by it. Left as-is (out of scope for this
+  task) but documented in `PARAMETERS.md` §6.1a for whoever picks it up.
+- See `PARAMETERS.md` §6, §6.1a, and §9 item 3 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
