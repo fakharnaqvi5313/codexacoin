@@ -94,11 +94,31 @@
         <input id="stake-email" type="email" />
         <label class="field-label">Password</label>
         <input id="stake-password" type="password" />
+        <div id="signup-only-fields">
+          <p class="notice">Signing up also requires the fields below.
+             This is self-attested information, not verified identity
+             checking -- see the note at the bottom of this section.</p>
+          <label class="field-label">Full name</label>
+          <input id="stake-full-name" type="text" autocomplete="name" />
+          <label class="field-label">Date of birth</label>
+          <input id="stake-dob" type="date" />
+          <label class="field-label">ID type</label>
+          <select id="stake-id-type">
+            <option value="nic">National ID card</option>
+            <option value="passport">Passport</option>
+          </select>
+          <label class="field-label">ID number</label>
+          <input id="stake-id-number" type="text" autocomplete="off" />
+        </div>
         <div class="row">
           <button class="primary" id="btn-stake-login">Log in</button>
           <button class="secondary" id="btn-stake-signup">Sign up</button>
         </div>
         <div class="error" id="stake-auth-error"></div>
+        <p class="notice small">These fields are stored as entered and are not
+           checked against any document or verification provider. Your ID
+           number is encrypted before storage; your name and date of birth
+           are not.</p>
       </div>
       <div class="card" id="staking-status-card" style="display:none">
         <div class="stat-row"><span>Delegated</span><span id="stat-delegated">0 CAC</span></div>

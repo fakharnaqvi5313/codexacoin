@@ -42,7 +42,7 @@ export class Gateway {
   broadcast(rawTxHex) { return this._post("/v1/tx/broadcast", { raw_tx_hex: rawTxHex }); }
   feeEstimate(targetBlocks = 6) { return this._get(`/v1/fee-estimate?target_blocks=${targetBlocks}`); }
 
-  signup(email, password) { return this._post("/v1/auth/signup", { email, password }); }
+  signup(email, password, kyc) { return this._post("/v1/auth/signup", { email, password, ...kyc }); }
   login(email, password) { return this._post("/v1/auth/login", { email, password }); }
 
   stakingStatus(token) { return this._get("/v1/staking/status", { auth: token }); }

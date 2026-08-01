@@ -19,10 +19,22 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                created_at REAL NOT NULL
+                created_at REAL NOT NULL,
+                full_name TEXT,
+                date_of_birth TEXT,
+                id_type TEXT,
+                id_number_encrypted TEXT
             )
             """
         )
+        # Signup originally had no KYC fields (see PARAMETERS.md section
+        # 13.6) -- ALTER TABLE ADD COLUMN for anyone whose users table
+        # already exists from before these columns were added. SQLite has
+        # no "ADD COLUMN IF NOT EXISTS", so check first.
+        existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        for col in ("full_name", "date_of_birth", "id_type", "id_number_encrypted"):
+            if col not in existing_cols:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS watched_addresses (

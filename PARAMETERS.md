@@ -915,6 +915,45 @@ assumptions about this fork, or missing production-readiness pieces:
 4. Revisit the direct-RPC backend's scaling limitation (§13.1) once
    electrumx-cac's packaging issue is resolved on a real target VPS.
 
+### 13.6 Signup "KYC" fields (2026-08-01) — self-attested, not verified
+
+Requested and scoped carefully: the original ask was for real KYC on web
+wallet signup. That would mean identity documents, a licensed
+verification provider (Sumsub/Onfido/etc.), and compliance with
+AML/data-protection law that varies by jurisdiction — none of which this
+project has, and none of which can be responsibly stood up as a side
+effect of a feature request. Building a fake "upload your ID" flow
+without real verification behind it would be worse than nothing: it
+collects sensitive PII while giving false assurance that anyone was
+actually checked.
+
+What was actually built, after clarifying scope: signup now additionally
+collects full name, date of birth, and a national ID or passport number
+(`vps-gateway/kyc.py`, `/v1/auth/signup`). This is explicitly
+**self-attested data, not verification** — nothing checks it against a
+document or a provider, and both the API and the web wallet's UI say so
+directly rather than implying otherwise.
+
+The ID number is real government-ID data, so it's encrypted at rest
+(Fernet, symmetric) via a new `GATEWAY_KYC_ENCRYPTION_KEY` rather than
+stored as plaintext next to the password hash — name and date of birth
+stay plaintext (needed for display, far less sensitive alone). If that
+key is ever lost, previously-stored ID numbers become permanently
+unreadable; nothing downstream ever reads them back programmatically, so
+that's an acceptable tradeoff for this design, not an oversight.
+
+**Not done, and deliberately not attempted**: a referral/"airdrop"
+reward (10% of a referred user's first deposit, paid to the referrer)
+was also requested. Not built yet — the funding source is still
+unresolved. This project's own supply design (§7) is fixed: the premine
+plus ongoing staking rewards, nothing else mints CAC, and there's no dev
+fund (§9 item 8) to draw from. A referral payout has to come from
+somewhere real -- newly minted supply (a consensus-level change),
+deducted from the referred user's own deposit, or paid from the pool's
+fee revenue -- and picking one silently risks either breaking the
+fixed-supply model or creating a solvency problem for other users'
+custodial funds. Revisit once the funding mechanism is actually decided.
+
 ---
 
 ## 14. Cold-staking (6B) — a future consensus upgrade, not implemented

@@ -718,6 +718,30 @@ above.
 
 ---
 
+## Website polish, self-attested signup fields, and a deferred referral feature
+
+### 2026-08-01
+
+- **Website visual polish**: hero glow, logo float animation, card/roadmap
+  hover states, real button shadows, nav underline animation, and
+  focus-visible outlines -- no structural or content changes.
+- **Signup collects self-attested KYC fields** (full name, date of birth,
+  national ID or passport number) -- explicitly not identity
+  verification (no document check, no provider), both the API and the
+  UI say so plainly. ID numbers are encrypted at rest via a new
+  `GATEWAY_KYC_ENCRYPTION_KEY`; name/DOB stay plaintext. See
+  `PARAMETERS.md` section 13.6 for the full reasoning, including why a
+  from-scratch "real KYC" wasn't attempted.
+- **Referral/airdrop reward requested, not built**: the funding source
+  (newly minted supply, taken from the referred deposit, or paid from
+  pool fees) was never pinned down, and this project's supply is
+  otherwise fixed by design (premine + staking rewards only, no dev
+  fund). Building a payout mechanism without deciding that first risked
+  either breaking the fixed-supply model or a solvency problem for
+  other users' custodial funds. See `PARAMETERS.md` section 13.6.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

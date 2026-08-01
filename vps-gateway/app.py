@@ -25,11 +25,15 @@ Configuration is via environment variables (see README.md):
     GATEWAY_POOL_FEE_BP      (default: 500 = 5%, matches cac_wallet's placeholder)
     GATEWAY_VAPID_PUBLIC_KEY / GATEWAY_VAPID_PRIVATE_KEY_PATH / GATEWAY_VAPID_SUBJECT
                              (Web Push -- see push.py and README.md's "Web Push" section)
+    GATEWAY_KYC_ENCRYPTION_KEY
+                             (Fernet key encrypting signup ID numbers at rest --
+                              see kyc.py. Signup returns 503 without it.)
 
 Fee estimation (/v1/fee-estimate) uses the node's live mempoolminfee and
 mempool fullness as a heuristic -- see that endpoint's own comment for
 why this codebase can't do real estimatesmartfee-style calibration.
 """
+import datetime
 import os
 import time
 
@@ -40,6 +44,7 @@ from flask_limiter.util import get_remote_address
 
 import auth
 import db
+import kyc
 import rpc
 import staking
 from rpc import RpcError
@@ -338,18 +343,53 @@ def fee_estimate():
 @app.route("/v1/auth/signup", methods=["POST"])
 @limiter.limit("10 per hour")
 def signup():
+    # Signup fields below (full_name/date_of_birth/id_type/id_number) are
+    # self-attested, not verified -- see kyc.py's module docstring. Not a
+    # substitute for real identity verification; don't treat a filled-in
+    # ID number as proof of anything.
+    if not kyc.configured():
+        return error("rpc-error", "Signup is temporarily unavailable (server misconfigured)", 503)
+
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
+    full_name = (body.get("full_name") or "").strip()
+    date_of_birth = (body.get("date_of_birth") or "").strip()
+    id_type = (body.get("id_type") or "").strip().lower()
+    id_number = (body.get("id_number") or "").strip()
+
     if not email or "@" not in email or len(password) < 8:
         return error("invalid-address", "Valid email and password (>=8 chars) required", 400)
+    if not full_name:
+        return error("invalid-address", "Full name is required", 400)
+    try:
+        dob = datetime.date.fromisoformat(date_of_birth)
+    except ValueError:
+        return error("invalid-address", "date_of_birth must be YYYY-MM-DD", 400)
+    if dob >= datetime.date.today() or dob.year < 1900:
+        return error("invalid-address", "date_of_birth is not a valid birth date", 400)
+    if id_type not in kyc.VALID_ID_TYPES:
+        return error("invalid-address", f"id_type must be one of {sorted(kyc.VALID_ID_TYPES)}", 400)
+    if not id_number:
+        return error("invalid-address", "id_number is required", 400)
+
     with db.db() as conn:
         existing = conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone()
         if existing:
             return error("invalid-address", "An account with that email already exists", 409)
         cur = conn.execute(
-            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (email, auth.hash_password(password), db.now()),
+            """INSERT INTO users
+               (email, password_hash, created_at, full_name, date_of_birth, id_type, id_number_encrypted)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                email,
+                auth.hash_password(password),
+                db.now(),
+                full_name,
+                date_of_birth,
+                id_type,
+                kyc.encrypt_id_number(id_number),
+            ),
         )
         conn.commit()
         user_id = cur.lastrowid

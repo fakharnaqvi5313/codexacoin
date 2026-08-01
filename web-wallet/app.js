@@ -247,7 +247,18 @@ async function stakeAuth(action) {
   const email = document.getElementById("stake-email").value.trim();
   const password = document.getElementById("stake-password").value;
   try {
-    const result = action === "login" ? await state.gateway.login(email, password) : await state.gateway.signup(email, password);
+    let result;
+    if (action === "login") {
+      result = await state.gateway.login(email, password);
+    } else {
+      const kyc = {
+        full_name: document.getElementById("stake-full-name").value.trim(),
+        date_of_birth: document.getElementById("stake-dob").value,
+        id_type: document.getElementById("stake-id-type").value,
+        id_number: document.getElementById("stake-id-number").value.trim(),
+      };
+      result = await state.gateway.signup(email, password, kyc);
+    }
     state.stakeToken = result.token;
     sessionStorage.setItem("cac_stake_token", result.token);
     loadStaking();
