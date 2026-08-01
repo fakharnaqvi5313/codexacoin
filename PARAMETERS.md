@@ -400,6 +400,47 @@ input and paying a coin-age-proportional reward on top of it
 `28,011,878.90693625 CAC` under the `"stake"` category). The chain is no
 longer stalled.
 
+### 6.5 Why `nCoinbaseMaturity` stays at 500 for now, and when to revisit it
+
+Raised and considered on 2026-08-01, right after §6.4's fix: should
+`nCoinbaseMaturity` (500 blocks, ~8.9h at 64s spacing) be lowered, since
+it now gates every future staking reward, not just the one-time premine?
+"10 confirmations" was the initial suggestion, on the reasoning that it's
+roughly standard practice for trusting an ordinary transaction.
+
+That comparison doesn't transfer here. `nCoinbaseMaturity` isn't a
+"trust this payment" threshold — it only ever applies to newly-minted
+coinbase/coinstake outputs (`tx_verify.cpp`: `coin.IsCoinBase() ||
+coin.IsCoinStake()`), never to ordinary transactions, which remain
+spendable after a single confirmation same as any other chain. For
+coinbase/coinstake maturity specifically, even Bitcoin itself uses 100
+blocks, not 10 — and the reasoning for staying conservative here is
+stronger than Bitcoin's, for two compounding reasons:
+
+1. **No slashing.** Nothing in `pos.cpp`/`wallet/staking.cpp` penalizes a
+   staker for building on more than one competing chain tip with the same
+   coins — the classic "nothing at stake" problem for a PoS design this
+   simple. Confirmation depth is doing double duty here: it's not just
+   "how likely is a reorg," it's the *only* real deterrent against someone
+   quietly building a longer alternate chain and swapping it in later.
+   Shortening it directly shortens that deterrent.
+2. **Stake concentration is currently at its worst.** As of this writing,
+   essentially all stakeable coin-weight is the founder premine, held by a
+   small set of wallets under direct control of the project. That is
+   exactly the condition under which a self-reorg is *cheapest* to
+   attempt — a single party already holds enough stake weight to try it.
+   This is the opposite of the moment to shrink the safety margin.
+
+**Decision: keep 500 for now.** The right maturity depth here should
+track how genuinely distributed the network's stake is, not be fixed
+forever — revisit lowering it once real, independent stakers hold a
+meaningful share of total stake weight (post-launch, real participation),
+at which point a self-reorg by any single holder becomes far less
+practical and a shorter window becomes safe the same way it is on
+established chains. Lowering it now, while stake is maximally
+concentrated, would be lowering the network's security at exactly the
+wrong time.
+
 ---
 
 ## 7. Supply ceiling — `MAX_MONEY` and the `int64` `CAmount` constraint
