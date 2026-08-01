@@ -1,0 +1,65 @@
+name: cac_wallet
+description: >
+  CodexaCoin (CAC) light wallet -- Android + iOS, one Flutter codebase.
+  Key generation/storage and transaction signing happen entirely
+  on-device; the app performs NO mining, staking, or background
+  processing (see ../docs/store-compliance.md). All staking happens on
+  the VPS staking service (Phase 6) via the gateway API specified in
+  ../docs/mobile-api.md.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # -- Key derivation --
+  # BIP39 mnemonic generation/validation and seed derivation.
+  bip39: ^1.0.6
+  # Generic BIP32 HD key derivation (secp256k1). Not Bitcoin-specific by
+  # itself -- CAC's address encoding (Base58Check with our own version
+  # bytes, bech32 with HRP "cac") is implemented in lib/crypto/ rather
+  # than depending on a higher-level Bitcoin-family package, since those
+  # packages are built for standard Bitcoin-derived coins and CAC's PoS
+  # coinstake transaction format is genuinely nonstandard (see
+  # lib/crypto/README in-code notes). Ordinary (non-coinstake) sends are
+  # wire-compatible with standard nVersion=2 Bitcoin transactions, which
+  # is the only kind this wallet ever constructs -- it never builds a
+  # coinstake, by design (no on-device staking).
+  bip32: ^2.0.0
+  pointycastle: ^3.9.1 # secp256k1 ECDSA, SHA256, RIPEMD160
+  bs58check: ^1.0.2    # Base58Check, used for CAC address encoding
+  bech32: ^0.2.2        # bech32/bech32m, for the "cac"/"tcac" HRP
+
+  # -- Secure storage (Keychain / Keystore, see docs/store-compliance.md) --
+  flutter_secure_storage: ^9.2.2
+
+  # -- QR --
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.1.1 # pinned below 5.2.0's Dart >=3.4.0 bump; this SDK is Dart 3.3.4
+
+  # -- Biometric app lock --
+  local_auth: ^2.3.0
+
+  # -- Networking (gateway API, see docs/mobile-api.md) --
+  http: ^1.2.2
+
+  # -- State management (kept deliberately simple for this phase) --
+  provider: ^6.1.2
+
+  # -- misc --
+  convert: ^3.1.1
+  intl: ^0.19.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
