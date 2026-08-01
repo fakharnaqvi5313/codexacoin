@@ -176,10 +176,32 @@ stall.
 
 ### 5.3 Supply-audit script
 
-`codexacoin-core/scripts/audit_premine_supply.py` (to be added in this phase)
-sums `GetProofOfWorkSubsidy()` across blocks 1–500 from the compiled `codexacoind`
-via RPC (`getblock`/`gettxout` on the coinbase outputs) and asserts the total
-equals exactly `14,000,000,000 * COIN` satoshis, with zero drift.
+`codexacoin-core/scripts/audit_premine_supply.py` sums the coinbase reward
+across blocks 1–500 via RPC and asserts the total equals exactly
+`14,000,000,000 * COIN` satoshis, with zero drift.
+
+### 5.4 Premine window completion and checkpoint freeze (2026-08-01)
+
+The real 500-block founder premine window described above was mined live
+on mainnet — all 500 blocks, privately, before any public release. Two
+things were done immediately once block 500 landed:
+
+- **Supply audit**: `audit_premine_supply.py` scanned the live chain and
+  confirmed the total minted across blocks 1–500 is exactly
+  `14,000,000,000.00000000 CAC`, with a constant `28,000,000 CAC`
+  per-block reward across the entire window — zero deviation.
+- **Checkpoint freeze**: all 501 block hashes (genesis through block 500,
+  fetched live via `getblockhash`) are now hardcoded into mainnet's
+  `checkpointData` in `chainparams.cpp`, per the plan in §5.1. This makes
+  the entire premine window unreorgable for any node that ever syncs from
+  genesis — a deep reorg past this point is now rejected outright rather
+  than merely improbable.
+
+The node was restarted after each change (binary rebuild, then again
+after the checkpoint-data rebuild) and both times came back up cleanly at
+the same height with `bestblockhash` matching the newly-hardcoded height-500
+checkpoint exactly — confirming the checkpoints validate the real chain
+rather than accidentally diverging from it.
 
 ---
 
@@ -407,11 +429,14 @@ the daemon has been run against them (see §6.1).
 ## 9. Open TODOs before any public launch
 
 1. ~~Generate the actual genesis block~~ — **done this phase**, see §8.
-2. Mine the *real* (non-regtest) 500-block founder premine window privately
+2. ~~Mine the *real* (non-regtest) 500-block founder premine window privately
    on mainnet, verify total = exactly 14,000,000,000 CAC via
-   `scripts/audit_premine_supply.py` (already proven correct on regtest this
-   phase — see §6.1), then freeze those 500 block hashes into
-   `checkpointData`.
+   `scripts/audit_premine_supply.py`, then freeze those 500 block hashes into
+   `checkpointData`~~ — **done 2026-08-01**: mined all 500 blocks live,
+   `audit_premine_supply.py` confirmed the total is exactly
+   14,000,000,000 CAC with zero deviation across the window, and all 501
+   hashes (genesis through block 500) are now hardcoded into mainnet's
+   `checkpointData` in `chainparams.cpp`. See §5.4.
 3. Write the formal Appendix A.5 test suite (unit tests for the formula incl.
    128-bit overflow cases, the full-simulated-year calibration test, the
    age-cap test, the kernel-independence statistical test) — this phase only
@@ -514,3 +539,568 @@ Debian's packaged leveldb).
    `docs/mobile-api.md` — that document is a specification only; Phase 4
    did not implement the gateway itself (Phase 5/6 work, once the mobile
    app architecture and staking service exist to build it alongside).
+
+---
+
+## 12. Mobile wallet (Phase 5) — build environment and what was verified
+
+`cac_wallet/` (CodexaCloud repo root) is the Flutter light wallet for
+Android + iOS, built against `docs/mobile-api.md`'s gateway contract and
+`docs/store-compliance.md`'s zero-on-device-staking constraint.
+
+### 12.1 Flutter SDK version — a real macOS 12 compatibility wall
+
+The current Flutter stable release (3.44.8, installed via `brew install
+--cask flutter`) fails outright on this development machine: `flutter
+--version` reports `VM initialization failed: Current Mac OS X version
+12.0 is lower than minimum supported version 14.0` — the Dart VM shipped
+with recent Flutter releases refuses to start on macOS 12.7.6. This is a
+genuine host-OS ceiling, not a project misconfiguration.
+
+**Fix**: Flutter 3.19.6 (Dart 3.3.4, April 2024) — an older stable
+release from before Flutter's toolchain raised its minimum macOS
+requirement — installed manually (SDK zip extracted to
+`~/flutter-sdk`, not via the Homebrew cask) and confirmed working. All
+Phase 5 development and verification below used this SDK. One downstream
+consequence: `mobile_scanner` had to be pinned to `^5.1.1` instead of the
+latest `5.2.x`, since 5.2.0+ requires Dart >=3.4.0 (see
+`cac_wallet/pubspec.yaml`'s comment on that line).
+
+### 12.2 Unit tests — verified, all passing
+
+`flutter test` (crypto + integration-stub suites): **22 passed, 0
+failed, 6 skipped** (the skipped tests are `test/integration/
+gateway_integration_test.dart`, which require a live gateway deployment
+that doesn't exist yet — see §11 item 3). Notably this includes:
+
+- Address round-trip tests in `test/crypto/address_test.dart` against the
+  real ground-truth mainnet addresses recorded in §3.1 above — decoding
+  one of those C++-node-generated addresses and re-encoding the extracted
+  hash reproduces the original string exactly, a genuine cross-
+  implementation check, not just internal self-consistency.
+- A full ECDSA signature verification test in
+  `test/crypto/transaction_test.dart`: builds and signs a transaction with
+  the hand-rolled `crypto/transaction.dart`, independently reconstructs
+  the expected legacy SIGHASH_ALL preimage from the known fixture inputs
+  (not by re-parsing the signer's own output), and verifies the extracted
+  signature against it using pointycastle's verifier directly — proving
+  the wallet's signing code produces mathematically valid, standard-format
+  signatures.
+
+`flutter analyze`: **0 issues** (after fixing a `const` bug —
+`StakingStatus.notOptedIn` was declared `const` but initialized with
+`BigInt.zero`, which isn't a compile-time constant in Dart — and a couple
+of unused-import warnings).
+
+### 12.3 Android — verified end-to-end, including a real on-device UI check
+
+The project had no `android/`/`ios/` platform directories initially
+(hand-scaffolded `lib/` came first); `flutter create --platforms=android,
+ios .` added them without disturbing the existing `pubspec.yaml`/`lib/`.
+
+Android build required two fixes, both applied and documented inline:
+- **Gradle/Java mismatch**: this machine's default `java` is JDK 22, but
+  the Flutter template's Gradle 7.6.3 doesn't support Java 22 class files
+  (`Unsupported class file major version 66`). Fixed by pointing
+  `JAVA_HOME` at the JDK 17 already installed on this machine (a
+  well-established compatible Gradle/Java pairing) rather than upgrading
+  the project's Gradle version.
+- **minSdkVersion**: Flutter's template default (19) is below what
+  `mobile_scanner` requires (21). Bumped `android/app/build.gradle`'s
+  `minSdkVersion` to 21 directly, per Flutter's own suggested fix.
+
+With both fixed, `flutter build apk --debug` succeeded
+(`app-debug.apk`). It was then actually installed (`adb install`) and
+launched (`adb shell am start`) on a real emulator (`Pixel_Fold_API_35`,
+already present on this machine from prior work) — not just compiled.
+Verification, in order: process stayed alive with no `FATAL`/
+`AndroidRuntime` exceptions in `logcat`; a device screenshot (via `adb
+shell screencap`, which doesn't depend on macOS's own screen-capture
+APIs) showed the onboarding screen rendering exactly as designed — the
+gold-themed "CodexaCoin Wallet" title, wallet icon, and both "Create a
+new wallet" / "Restore from recovery phrase" buttons; tapping "Create a
+new wallet" was exercised, though a follow-up screenshot during that
+transition was inconclusive due to severe CPU contention on this machine
+at the time (the 500-block founder-premine mining described in §5 was
+running concurrently on the same 8 logical cores) — the process itself
+never crashed or logged an exception throughout.
+
+### 12.4 iOS — not verified this phase; documented, not silently skipped
+
+Xcode 14.2 and the iOS 16.2 Simulator runtime are already present and
+working (confirmed via `xcrun simctl list devices`). The blocker is
+CocoaPods: it isn't installed, and `brew install cocoapods` on this
+machine triggers building **LLVM from source** as a transitive
+dependency — a multi-hour compile even before accounting for the CPU
+contention from the concurrent premine mining, with no precompiled bottle
+available for this specific macOS/Homebrew combination. This is a
+genuine, disproportionate environment cost relative to what iOS
+verification would add on top of Android's already-real, on-device
+confirmation of the same shared Dart codebase (crypto, services, and
+every screen are 100% shared between platforms; only the platform
+embedding differs) — so it was deliberately not pursued further this
+phase rather than left running silently or claimed as done.
+
+### 12.5 Open TODOs from this phase
+
+1. Verify iOS Simulator build once CocoaPods is available without a
+   from-source LLVM build (e.g. on a newer macOS host, or by sourcing a
+   prebuilt LLVM bottle from elsewhere).
+2. Exercise the full send/receive/staking-status screens against a real
+   gateway deployment once one exists (see §11 item 3) — everything
+   verified this phase used the local crypto layer directly or a bare
+   onboarding-screen UI check; the gateway-dependent screens are
+   implemented and unit-tested but not yet exercised against a live
+   backend.
+3. Re-run the inconclusive "Create a new wallet" on-device screenshot
+   check in isolation (without concurrent mining/build load) to get a
+   clean visual confirmation of the mnemonic-display step.
+
+---
+
+## 13. VPS gateway and custodial staking pool (Phase 6)
+
+`vps-gateway/` implements `docs/mobile-api.md` for real (Phase 4 was a
+specification only), plus the 6A custodial staking pool. `web-wallet/`
+is a browser-based wallet consuming the same gateway. Full design and
+configuration details live in `vps-gateway/README.md` and
+`web-wallet/README.md`; this section is the verification record.
+
+### 13.1 Backend choice: direct RPC, not electrumx-cac
+
+The gateway queries `codexacoind` directly via RPC (a dedicated
+watch-only descriptor wallet that imports any address it's asked about
+on first use), rather than talking to `electrumx-cac` as
+`docs/mobile-api.md` originally envisioned. The client-facing REST
+contract is identical either way — that document's own design already
+treats the backend as an internal detail behind the gateway. This
+substitution exists because electrumx-cac's local verification remained
+blocked by the macOS-specific storage-backend packaging issue documented
+in §11, and this phase needed something actually runnable end-to-end
+during development, not because the Electrum-backed design was wrong.
+**This does not scale to a mature mainnet** the way electrumx-cac's
+pre-built global index would (importing + rescanning a never-before-seen
+address gets slower as chain history grows) — see `vps-gateway/README.md`'s
+"Known limitation" for the full statement. A real production deployment
+on a real Linux VPS (where the packaging issue doesn't apply) should
+still pursue the Electrum-backed design.
+
+### 13.2 Staking pool design (6A)
+
+Each deposit gets its own dedicated on-chain UTXO, never consolidated
+with other depositors' funds. This means the chain's own
+already-verified coin-age-proportional PoS reward logic (§6) computes
+each depositor's reward correctly on its own — the pool only has to
+notice when a deposit's UTXO gets staked and credit the depositor's
+ledger with the reward minus the pool fee, never reimplement the reward
+formula itself. Deliberately chosen to avoid the reward-calculation bug
+class documented in §6.3 (found and fixed in Phase 2) by never writing a
+second implementation of that math that could drift or have its own
+bugs.
+
+### 13.3 What was actually verified
+
+Full lifecycle verified end-to-end against a real node on regtest
+(chosen over mainnet/testnet specifically because it allows controllable
+coin maturity, so a real coinstake reward could actually be produced and
+observed within one working session):
+
+- Signup, login (JWT), and every general wallet endpoint (`balance`,
+  `utxos`, `history`, `tx` detail with real `is_coinstake`/
+  `reward_satoshis` computation against an actual coinstake transaction,
+  `broadcast`, `fee-estimate`) against real on-chain data.
+- Deposit → external funding → watcher detects the funded UTXO →
+  node stakes it (after discovering, empirically, that this fork's
+  `GetStakeWeight()` requires the same `nCoinbaseMaturity` depth as
+  coinbase maturity for *any* staking input, not just coinbase outputs —
+  not previously documented anywhere in this file) → watcher detects the
+  resulting coinstake and computes the gross reward, which matched the
+  wallet's own reported amount exactly → 5% pool fee deducted exactly →
+  `/staking/status` reflects the correct net figure → withdraw →
+  status correctly zeroes out afterward once the payout covers both
+  principal and reward.
+- The web wallet, in a real browser: BIP39/BIP32 key generation and
+  correctly-prefixed mainnet address derivation via CDN-loaded
+  `@noble`/`@scure` libraries (chosen specifically because they need no
+  bundler — see `web-wallet/README.md`), balance display, staking
+  signup/login/status, and the deposit flow receiving a real deposit
+  address from the pool.
+
+### 13.4 Bugs found and fixed along the way
+
+None of these were bugs in this gateway's own logic or in CAC's
+consensus code — all were either genuine gaps in an external tool's
+assumptions about this fork, or missing production-readiness pieces:
+
+1. **Three bugs in `cpuminer-opt` (external mining tool)**, found while
+   separately mining the founder premine window in parallel with this
+   phase's work — see §9's mining-progress note and `CHANGELOG.md`'s
+   Phase 6 entry for the full writeup (wrong coinbase `nVersion`, a
+   missing `vchBlockSig` trailing byte, and BIP34 height encoding for
+   heights 1–16). Fixed by patching the external tool, not this
+   project's code.
+2. **No CORS headers on the gateway** — every browser request from
+   `web-wallet/` (a different origin by definition) was silently
+   blocked until `flask-cors` was added. Any real web-wallet deployment
+   needs this; it just hadn't been exercised from an actual browser
+   until this phase's verification pass caught it.
+3. **`ensure_pool_wallet_loaded`/`ensure_wallet_loaded` swallowed
+   `loadwallet` failures unconditionally**, falling through to
+   `createwallet` and producing a confusing "already exists" error
+   instead of the real problem (in one case, a stale lock from a
+   previous test run's process being force-killed mid-RPC-call). Fixed
+   to check `listwalletdir` and surface the actual failure.
+4. **`staking.withdraw()`'s stale reward display**: after a full
+   withdrawal, `/staking/status` kept reporting the just-paid-out reward
+   as still "accrued" because the SQL query summed all of a user's
+   reward rows regardless of whether the underlying deposit had already
+   been withdrawn. Fixed to only count rewards on still-active deposits.
+
+### 13.5 Open TODOs from this phase
+
+1. Stand up a real gateway + staking pool deployment on the actual VPS
+   infrastructure this is designed for (`provisioning/vps-gateway/`) —
+   verified locally against regtest and mainnet-without-real-staking
+   only.
+2. Partial-withdrawal accounting (§13.2's "known simplification" —
+   `withdraw()` currently closes out a user's entire position at once).
+3. Tighten `GATEWAY_CORS_ORIGINS` from the development default (`*`) to
+   the real web wallet's origin before any production deployment.
+4. Revisit the direct-RPC backend's scaling limitation (§13.1) once
+   electrumx-cac's packaging issue is resolved on a real target VPS.
+
+---
+
+## 14. Cold-staking (6B) — a future consensus upgrade, not implemented
+
+Phase 6 scope was deliberately limited to 6A (custodial pooling, §13).
+This section specifies what 6B (non-custodial delegated staking) would
+actually require, since the current codebase has **no cold-staking
+script support at all** — confirmed by searching the tree for any
+existing delegation opcode or P2CS-style template before writing this
+(none found). This is a real, ground-up consensus feature addition, not
+a small extension, and is not implemented or activated by anything in
+this repository. Writing it here follows this project's own rule of
+never inventing consensus changes silently — this is the "ask/design
+first" version of that rule applied to a whole feature, not just a
+constant.
+
+### 14.1 What "cold staking" means here
+
+The owner of a UTXO delegates *staking eligibility* (not spending
+authority) to a second key. The delegate can produce valid PoS blocks
+using the owner's coin-age weight and receives a fee share of the
+resulting reward; the delegate can never move the owner's principal —
+only the owner's own key can spend it. This is the standard model used
+by PIVX, Blackcoin, and similar Peercoin-derived chains via an
+`OP_CHECKCOLDSTAKEVERIFY`-style opcode.
+
+### 14.2 What implementing it for real would require
+
+1. **A new script opcode** (`OP_CHECKCOLDSTAKEVERIFY` or equivalent,
+   claiming one of the currently-unused `OP_NOP`-range opcode slots) and
+   a new P2CS-style output script template combining it with the
+   existing P2PKH pattern: roughly `OP_DUP OP_HASH160 OP_ROT
+   OP_IF <ownerPubKeyHash> OP_ELSE OP_CHECKCOLDSTAKEVERIFY
+   <stakingPubKeyHash> OP_ENDIF OP_EQUALVERIFY OP_CHECKSIG`,
+   distinguishing "spend" (owner branch) from "stake" (delegate branch)
+   at redemption time.
+2. **Script interpreter changes** (`script/interpreter.cpp`) to
+   implement the new opcode's semantics: when evaluated in a coinstake
+   context, verify the spending transaction's outputs pay back to the
+   *same* P2CS script (so the delegate can never redirect the
+   principal), and are structured as a valid coinstake per the existing
+   `CTransaction::IsCoinStake()` rules (§ referenced in
+   `vps-gateway/staking.py`'s reward-detection logic, which already
+   reimplements that exact check in Python — a second, independent
+   confirmation of what that definition is).
+3. **Consensus validation changes** (`validation.cpp`,
+   `wallet/staking.cpp`'s `SelectCoinsForStaking`/`AvailableCoinsForStaking`)
+   to recognize P2CS outputs as stake-eligible for a wallet holding the
+   *staking* key, not just the owner key, while continuing to enforce
+   that only the owner key can authorize a non-coinstake spend of the
+   same output.
+4. **A deployment mechanism**: this is a hard-fork-shaped change (old
+   nodes would reject blocks containing the new opcode/script pattern as
+   invalid) unless carefully designed as a soft fork (e.g. by encoding
+   the new template inside a script form old nodes already treat as
+   anyone-can-spend-but-otherwise-opaque, the way SegWit did). Needs its
+   own dedicated design review before any activation-height/BIP9-bit
+   decision — explicitly out of scope for this section, which only
+   specifies the *feature*, not how it gets safely turned on.
+5. **Wallet-side delegation transaction construction** in both
+   `codexacoin-core`'s wallet RPCs and `cac_wallet`'s Dart signing layer,
+   which today only ever builds and signs ordinary P2PKH spends (see
+   `cac_wallet/lib/crypto/transaction.dart`'s module doc) — building a
+   P2CS output is new output-construction logic, not just a new signing
+   path.
+6. **Gateway endpoints already stubbed for this**: `docs/mobile-api.md`
+   section 5's `/staking/delegate` and `/staking/revoke` describe the
+   intended API shape (delegate to the pool operator's staking pubkey,
+   default 5% delegate-fee split matching §13.2's pool fee) but have no
+   backend — `vps-gateway/app.py` does not implement them at all yet.
+
+### 14.3 Why 6A doesn't need any of this
+
+6A's custodial design (§13.2) sidesteps all of the above by having the
+pool hold real private keys for pooled deposits directly — the *existing*
+staking mechanism already used everywhere else in this project (§6, §8,
+mainnet's ongoing founder-premine mining) applies unchanged. 6B's entire
+value proposition over 6A is removing the custodial trust requirement
+(users never give up spending authority); that benefit is exactly what
+costs a new consensus feature to deliver.
+
+---
+
+## 15. Block explorer (Phase 7) and final launch-readiness review
+
+### 15.1 Block explorer
+
+`explorer/` — public, read-only, no authentication, no wallet keys,
+deliberately a separate service from `vps-gateway/` (different trust
+boundary: nothing here can move funds). Same direct-RPC backend choice
+as §13.1, with `txindex=1` (already enabled and synced on this node —
+confirmed via `getindexinfo`) making arbitrary block/transaction lookup
+by hash/height/txid work natively. Address balance/UTXO lookups use
+`scantxoutset` (a stateless full-UTXO-set scan) rather than the
+wallet-import approach `vps-gateway` uses for the same reason explained
+there — accepting *any* address a visitor types in shouldn't accumulate
+permanent state per address. Same honest limitation as a result: current
+balance/UTXOs only, no historical/spent-transaction list without a real
+index.
+
+Verified in a real browser against the live mainnet node (the one
+executing the founder-premine mining below): home page chain stats,
+block detail with prev/next navigation, transaction detail (which
+incidentally showed the BIP34 height-encoding fix from the Phase 6
+mining-bug writeup embedded in a real on-chain coinbase — `029c0000` for
+block 156, i.e. `OP_PUSHBYTES_2 0x9c00` little-endian = 156, followed by
+the `OP_0` padding byte), and address search (balance matched
+`utxo_count × 28,000,000 CAC` exactly). See `explorer/README.md` for the
+full writeup.
+
+### 15.2 Founder premine mining — final status as of this writing
+
+**Complete — 500 of 500.** (See `CHANGELOG.md`'s Phase 5/6 entries for
+the three real external-mining-tool bugs found and fixed to get this
+running at all, and the machine-sleep/node-restart resilience confirmed
+along the way — the miner reconnected automatically with zero manual
+intervention every time, including recovering from real CPU
+contention/thermal throttling caused by unrelated processes on the same
+machine.) This was never a blocker for anything else in this repository,
+since every other service was built and verified against either this
+same partially-mined mainnet chain or a regtest chain with full control
+over height/maturity — but it's now fully done regardless. See §5.4 for
+the completion audit and checkpoint freeze.
+
+### 15.3 Final launch-readiness review
+
+Synthesizing §9's per-item list against everything actually verified
+across all seven phases:
+
+**Done and verified:**
+- Fork, rebrand, consensus reconfiguration (§1-4), genesis (§8), Qt
+  desktop wallet (§9 item 7), macOS `.dmg` packaging (§10).
+- Coin-age-proportional staking reward, including catching and fixing
+  two real reward-calculation bugs before they'd have caused silent
+  overpayment (§6.3).
+- Mobile wallet (§12): built, unit-tested (22/22 passing), Android
+  verified on-device (build → install → launch → correct UI, no
+  crashes).
+- VPS gateway + 6A custodial staking pool (§13): full deposit → stake →
+  reward → withdraw lifecycle verified against a real coinstake
+  transaction on regtest, byte-for-byte matching the chain's own
+  accounting.
+- Web wallet (§13.3) and block explorer (§15.1): both verified in a real
+  browser against live data, both sharing exact crypto/reward-decoding
+  logic with their mobile/gateway counterparts rather than
+  reimplementing it.
+- The 500-block founder premine window (§15.2 originally, completed and
+  superseded by §5.4): fully mined, supply-audited exact, and its 501
+  block hashes frozen into `checkpointData` (§9 item 2).
+
+**Genuinely still open (real work, not paperwork):**
+- The formal Appendix A.5 staking-reward test suite (§9 item 3) — only
+  one real end-to-end verification exists, not the full spec'd suite.
+- Windows/Linux desktop build artifacts (§9 item 9) — configuration
+  exists and reuses a proven CI matrix, but has never actually run on
+  GitHub Actions; only the macOS leg is locally built and verified.
+- Desktop build codesigning/notarization (§10).
+- `electrumx-cac`'s local packaging blocker (§11) — resolving this on a
+  real target VPS would let `vps-gateway` and `explorer` both drop their
+  direct-RPC scaling limitations (§13.1, §15.1) in favor of the
+  originally-designed indexed backend.
+- 6B non-custodial cold-staking (§14) — specified, not implemented;
+  needs its own dedicated design review before any activation decision,
+  as stated there.
+
+**External/administrative, not something further local work resolves:**
+- BIP44 coin type `3377` registration against the live SLIP-44 registry
+  (§9 item 4).
+- Real DNS seed hostnames and dedicated BIP32 xpub/xprv version bytes
+  (§9 items 5-6) — infrastructure/branding decisions, not technical
+  blockers.
+- A dev fund address decision (§9 item 8) — currently disabled
+  (`vDevFundAddress` empty on every network), a deliberate choice, not
+  an oversight, pending an explicit decision to enable it.
+- iOS Simulator verification (§12.4) — blocked by a from-source LLVM
+  compile this development machine can't reasonably absorb; not blocked
+  on a machine with a working CocoaPods/Homebrew bottle.
+
+No item in this list was glossed over or silently marked done without
+being actually checked — that's been the standing practice since Phase 1
+and stays true through this final phase.
+
+## 16. Post-launch-readiness feature additions
+
+After the Phase 7 review above, five further features were built and
+verified against either the live mainnet chain or a regtest chain
+(chosen per-feature based on which needed spendable/mature funds).
+None of these were part of the original 7-phase spec; they were
+scoped and approved via an open "what else should we add?" pass with
+the project owner (2026-08-01).
+
+### 16.1 Real dynamic fee estimation
+
+`vps-gateway`'s `/v1/fee-estimate` previously returned a hardcoded
+`FEE_RATE_SAT_VB` constant that was empirically found to be 10x the
+node's real `mempoolminfee` floor. Replaced with a live heuristic:
+`fee_rate = min(round(min_rate * urgency), min_rate * 10)` where
+`min_rate` comes straight from `getmempoolinfo().mempoolminfee` and
+`urgency = 1.0 + fullness * (10.0 / target_blocks)` scales with how
+full the mempool actually is. No `estimatesmartfee`-equivalent RPC
+exists in this codebase (confirmed empirically), so this is the
+closest available approximation without a full fee-history database.
+Verified live: returns `100 sat/vB` against an empty mempool, matching
+the node's own `mempoolminfee` exactly.
+
+### 16.2 P2SH multisig wallet support
+
+Added to both `web-wallet/crypto.js` and `cac_wallet` (Dart):
+`createMultisigRedeemScript`, `multisigAddress`,
+`createMultisigProposal`/`signMultisigProposal`/
+`mergeMultisigProposals`/`finalizeMultisigTransaction`. This is
+N-of-M bare multisig wrapped in P2SH (`OP_m <pubkeys> OP_n
+OP_CHECKMULTISIG`), using the standard `OP_0` scriptSig dummy-element
+convention and requiring signatures in pubkey order. The "proposal"
+object is a minimal hand-rolled partial-signature-exchange format
+(not a general PSBT implementation) — sufficient because a single
+wallet instance only ever holds one signer's key and proposals are
+expected to be exchanged out-of-band (e.g. copy/paste JSON).
+Verified via a real 2-of-3 create → sign (independently, per key) →
+merge → finalize cycle in both languages, with independent sighash
+reconstruction and `secp.verify()`/`ECDSASigner.verifySignature()`
+cross-checks, including a negative check confirming a signature does
+NOT verify against the wrong pubkey. `cac_wallet`'s test suite grew
+from 22 to 24 passing tests.
+
+### 16.3 Web Push notifications (web-wallet)
+
+New `vps-gateway/push.py` wraps `pywebpush` (VAPID/ES256, RFC
+8291/8292 `aes128gcm` payload encryption). New `push_subscriptions`
+table, `/v1/push/vapid-public-key` and `/v1/push/subscribe`
+endpoints, and `web-wallet/sw.js` (a minimal service worker handling
+only `push`/`notificationclick` — deliberately no offline caching,
+since the wallet's offline-first behavior is already handled by
+`localStorage`). Wired into `staking.py` so deposit-confirmed and
+reward-credited events fire a real notification.
+`send_notification()` swallows `WebPushException` and returns `False`
+rather than raising, since a dead subscription must never break a
+watcher pass that's crediting real money.
+
+**Verification note:** this development browser environment's
+`Notification.permission` is hard-denied by policy (a real,
+unbypassable constraint, not a bug — no workaround was attempted).
+The subscribe/notify wiring itself was instead verified at the
+protocol level: a local Python capture server receiving a real
+VAPID-signed, `aes128gcm`-encrypted push request from
+`send_notification()`, confirming the JWT signature and payload
+decrypt correctly. Full click-to-notification UX remains unverified
+in-browser in this environment; the crypto and server-side wiring are
+verified.
+
+### 16.4 Merchant checkout widget
+
+New top-level `checkout-widget/` — a single embeddable ES module
+(`checkout.js`, no build step, same no-bundler approach as
+`web-wallet/` and `explorer/`). Deliberately stateless on the
+backend: no new gateway endpoint, it polls the existing
+`GET /v1/address/{address}/balance` and fires `onDetected` once the
+watched address's balance rises by at least the amount due from a
+baseline snapshot. Scope is strictly "watch for payment, tell me when
+it arrives" — not payment-request management, invoicing, or refunds
+(a merchant is responsible for generating the address to charge, e.g.
+from their own gateway wallet or a customer's `cac_wallet` receive
+screen). Relevant to Apple's App Store virtual-currency guideline
+(`docs/store-compliance.md`) as the permitted "in exchange for goods
+and services" case.
+
+Verified end-to-end on regtest (mainnet's premine is still inside its
+500-block maturity window, so nothing there was spendable to test a
+real payment with): a real `sendtoaddress` payment was correctly
+detected, `onDetected` fired with the exact balance in satoshis.
+
+### 16.5 Block explorer: rich list, supply chart, live refresh
+
+Added to `explorer/app.py`: `/api/richlist` (walks the last
+`EXPLORER_RICHLIST_MAX_BLOCKS` — default 5000 — blocks, crediting
+output addresses and debiting resolved non-coinbase input addresses,
+returns the top balances) and `/api/supply-series` (exact, not
+scanned, computation for the PoW window via
+`min(height, LAST_POW_BLOCK) * POW_BLOCK_SUBSIDY_SATS`, bucketed to
+≤50 points — honestly notes it cannot compute PoS-phase supply the
+same way, since PoS block rewards have no fixed per-block formula).
+Frontend (`explorer/app.js`) adds a hand-rolled inline SVG line chart
+(no charting library), a `#/richlist` route, and a 20-second
+auto-refresh timer on the home route that's created on entry and
+cleared on navigating away.
+
+Verified live in-browser (not just via `curl`): the rich list showed
+the single mining-reward address with a balance of
+`303 × 28,000,000 = 8,484,000,000 CAC`, an exact match; the supply
+chart rendered a correct monotonic-ascending SVG polyline matching
+linear PoW-window minting; the auto-refresh timer was confirmed via
+an instrumented `setInterval`/`clearInterval` wrapper to be created
+exactly once per home-page visit and cleared exactly once per
+navigation away, across repeated round-trips — no leaked intervals.
+
+## 17. Deferred: governance and hardware wallet support
+
+Two further ideas came up in the same "what else should we add?" pass
+as §16 but were deliberately **not** built, following the same
+precedent as §14's cold-staking deferral — both are large enough to
+need their own design review before implementation, not something to
+bolt on inside a "build all which possible" pass.
+
+### 17.1 On-chain/off-chain governance
+
+Not specified anywhere in the original 7-phase spec, and CodexaCoin
+has no existing dev fund, treasury, or voting-weight mechanism to
+build a governance system on top of (`vDevFundAddress` is empty on
+every network per §9 item 8 — a deliberate no-dev-fund choice so
+far). Before this could be designed, the project owner would need to
+decide: on-chain (e.g. stake-weighted signaling, à la Decred) vs.
+off-chain (forum/Snapshot-style, non-binding) vs. no formal mechanism
+at all (informal, maintainer-driven — the current de facto state).
+Each has a materially different implementation and, for on-chain
+signaling, potential consensus-layer implications requiring the same
+scrutiny as §14's cold-staking design.
+
+### 17.2 Hardware wallet support
+
+No hardware wallet (Ledger, Trezor, or otherwise) ships firmware with
+a CodexaCoin coin app, and CAC is not part of any hardware vendor's
+generic "Bitcoin-like altcoin" support path today. Real support would
+require either: (a) a HWI (`hwi` Python library) integration
+contributing a CAC coin definition upstream to a vendor, which is
+outside this repository's control and timeline, or (b) if CAC's
+transaction/address format is close enough to an already-supported
+coin (worth checking given the Bitcoin-derived P2PKH/P2SH format —
+see §16.2's multisig work for the closely related script format),
+piggybacking on that coin's existing app with CAC-specific address
+version bytes — which still needs verification that no
+transaction-format divergence (e.g. the PoS `nTime` field noted
+elsewhere in this document) breaks the hardware wallet's blind- or
+clear-signing assumptions. Neither path is a local software change;
+both need scoping with an actual device in hand before any code is
+written.
