@@ -580,6 +580,26 @@ the daemon has been run against them (see §6.1).
    been run end-to-end (needs an actual GitHub Actions run against a
    pushed tag to fully verify) — the macOS leg is the only one locally
    built and verified.
+10. **Investigate: outbound P2P connections never actually attempt,**
+    found while deploying the block explorer (2026-08-01) and not yet
+    root-caused. Neither `addnode <ip:port> onetry` over RPC nor a
+    config-level `addnode=` (checked at startup, confirmed parsed —
+    "Config file arg: addnode=..." appears in `debug.log`) ever produces
+    a connection attempt: no matching log line, `getpeerinfo` never shows
+    an outbound entry, `getnetworkinfo` stays at `connections_out: 0`
+    indefinitely. Confirmed this isn't an environment/network problem —
+    a raw Python socket and `nc` both connect to the target instantly
+    from the same machine, and the target was independently confirmed
+    listening publicly (`ss -tlnp` showed `0.0.0.0:16210`). This points
+    at `CConnman`'s own connection-management code (`ThreadOpenAddedConnections`
+    or similar) rather than anything host-specific, but wasn't dug into
+    further this session — the explorer deployment worked around it with
+    a manual/periodic `blocks/`+`chainstate/` copy instead (see
+    `provisioning/explorer/README.md`) rather than blocking on a fix. A
+    node genuinely unable to make outbound connections is a real problem
+    for eventual public launch (every node would need a `-connect=` or
+    to only ever receive inbound), so this needs a proper fix before
+    §9 item 6's DNS seeds would even be useful.
 
 ---
 
