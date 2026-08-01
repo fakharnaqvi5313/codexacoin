@@ -103,13 +103,43 @@ void StopStake(CWallet& wallet) {
     }
 }
 
+// CodexaCoin: staking-eligible balance -- deliberately NOT GetBalance()'s
+// m_mine_trusted, which (via CachedTxGetAvailableCredit -> IsTxImmature ->
+// GetTxBlocksToMaturity) only counts a coinbase/coinstake output once it
+// has nCoinbaseMaturity+1 confirmations. The PoS block-validation rule in
+// pos.cpp (CheckProofOfStake, ContextualCheckBlockHeader) only requires
+// nCoinbaseMaturity confirmations -- one block earlier, by design, per
+// PARAMETERS.md section 5.2, so the very first PoS block can be produced
+// the moment the PoW premine window ends with no dead zone. Reusing the
+// generic "trusted balance" here silently reintroduced exactly that dead
+// zone: every wallet would refuse to even attempt staking with its own
+// premine output until one block after the chain could actually accept
+// one, and since nLastPOWBlock permanently disables PoW at the same
+// height, nothing could ever produce that first block. Confirmed as a
+// real, reproducible stall at height 500 on live mainnet (2026-08-01) --
+// getbalances showed the full premine as "immature" and getstakinginfo
+// showed weight 0, both explained by chasing this exact code path.
+// Sums AvailableCoinsForStaking's own candidate list instead, which
+// already applies the correct (one-block-earlier) threshold via its
+// min_depth check.
+static CAmount GetStakingBalance(const CWallet& wallet)
+{
+    LOCK(wallet.cs_wallet);
+    std::vector<std::pair<const CWalletTx*, unsigned int>> vCoins;
+    AvailableCoinsForStaking(wallet, vCoins);
+    CAmount nBalance = 0;
+    for (const auto& coin : vCoins) {
+        nBalance += coin.first->tx->vout[coin.second].nValue;
+    }
+    return nBalance;
+}
+
 uint64_t GetStakeWeight(const CWallet& wallet)
 {
     // Choose coins to use
-    const auto bal = GetBalance(wallet);
-    CAmount nBalance = bal.m_mine_trusted;
+    CAmount nBalance = GetStakingBalance(wallet);
     if (wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS))
-        nBalance += bal.m_watchonly_trusted;
+        nBalance += GetBalance(wallet).m_watchonly_trusted;
 
     if (nBalance <= wallet.m_reserve_balance)
         return 0;
@@ -159,9 +189,11 @@ void AvailableCoinsForStaking(const CWallet& wallet,
         const uint256& wtxid = entry.first;
         const CWalletTx& wtx = entry.second;
 
-        if (wallet.IsTxImmature(wtx))
-            continue;
-
+        // CodexaCoin: no IsTxImmature() gate here -- see GetStakingBalance's
+        // comment above. The min_depth check a few lines down (already
+        // nCoinbaseMaturity, not +1) is the correct staking-specific
+        // maturity threshold; IsTxImmature would require one confirmation
+        // more than that and reintroduce the dead zone.
         int nDepth = wallet.GetTxDepthInMainChain(wtx);
         if (nDepth < 0)
             continue;
@@ -316,10 +348,9 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
     txNew.vout.push_back(CTxOut(0, scriptEmpty));
 
     // Choose coins to use
-    const auto bal = GetBalance(wallet);
-    CAmount nBalance = bal.m_mine_trusted;
+    CAmount nBalance = GetStakingBalance(wallet);
     if (fAllowWatchOnly)
-        nBalance += bal.m_watchonly_trusted;
+        nBalance += GetBalance(wallet).m_watchonly_trusted;
 
     if (nBalance <= wallet.m_reserve_balance)
         return false;

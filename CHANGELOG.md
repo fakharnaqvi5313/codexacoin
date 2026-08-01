@@ -603,6 +603,40 @@ above.
 
 ---
 
+## Fixed a chain-halting staking bug found live at height 500
+
+### 2026-08-01
+
+- **A third real staking bug, found the moment the premine window
+  finished**: every wallet reported `getstakinginfo` weight `0` and the
+  full 14,000,000,000 CAC premine as `"immature"` at height 500 — meaning
+  nothing could ever stake, and since PoW is permanently disabled past
+  block 500, nothing could ever produce block 501 either. A genuine
+  chain-halting deadlock, live on mainnet.
+- **Root cause**: `wallet/staking.cpp`'s coin selection for staking
+  (`GetStakeWeight`, `AvailableCoinsForStaking`, `CreateCoinStake`) reused
+  the wallet's generic "trusted balance" maturity check, which requires
+  `nCoinbaseMaturity + 1` confirmations — one more than `pos.cpp`'s actual
+  PoS validation rule (`>= nCoinbaseMaturity`), which was specifically
+  designed (§5.2) to let the first post-premine block be staked the
+  instant PoW ends. The wallet's own implementation was one confirmation
+  too conservative and silently reintroduced the exact dead zone the
+  design was supposed to prevent.
+- **Fix**: added a staking-specific balance helper
+  (`GetStakingBalance()`) that agrees with `pos.cpp`'s threshold instead
+  of the wallet's generic one; removed the redundant, stricter
+  `IsTxImmature()` gate from `AvailableCoinsForStaking`. Ordinary wallet
+  balance display and spending are untouched — this only changes which
+  coins the local wallet is willing to attempt staking with, not any
+  consensus rule, so there's no fork risk.
+- **Verified live**: staking weight went from `0` to exactly block 1's
+  28,000,000 CAC the moment the fix was deployed; block 501 was produced
+  within about a minute, correctly flagged as proof-of-stake, consuming
+  block 1's coinbase as its stake input and paying a coin-age-proportional
+  reward. See `PARAMETERS.md` §6.4 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

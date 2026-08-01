@@ -346,6 +346,60 @@ was never safe for a reward *amount* every node must agree on
 byte-for-byte, which the kernel-weight code never needed to do since kernel
 weight is amount-only (unaffected by any of this).
 
+### 6.4 A third, chain-halting bug — found live at the height-500 boundary
+
+Neither Phase 1 nor Phase 2's tests ever reached this scenario, because
+both used a short, artificial premine window on regtest/testnet with
+`generatetoaddress` fast-forwarding straight past the maturity boundary.
+The real 500-block mainnet premine (§5) hit it for real the moment mining
+finished: at height 500, `getbalances` reported the entire 14,000,000,000
+CAC premine as `"immature"` and `getstakinginfo` reported `"weight": 0` on
+every wallet — meaning **no wallet would even attempt to stake**, and
+since `nLastPOWBlock = 500` permanently disables PoW at that same height,
+nothing could ever produce block 501. A genuine chain-halting deadlock,
+live, on mainnet.
+
+**Root cause:** two different maturity thresholds exist in the codebase
+and were never reconciled. `pos.cpp`'s actual PoS block-validation rule
+(`CheckProofOfStake`) requires a stake input to have `>= nCoinbaseMaturity`
+confirmations — by design, so the very first post-premine block is
+producible the instant PoW ends (see §5.2's "no dead zone" reasoning,
+which assumed this). But `wallet/staking.cpp`'s coin-selection
+(`GetStakeWeight`, `AvailableCoinsForStaking`, `CreateCoinStake`) computed
+its candidate balance from `GetBalance()`'s generic `m_mine_trusted`
+figure and an `IsTxImmature()` filter — both of which, via
+`wallet.cpp::GetTxBlocksToMaturity()`, require `> nCoinbaseMaturity`
+confirmations (i.e. `nCoinbaseMaturity + 1`, matching upstream Bitcoin
+Core's ordinary spend-safety convention). That's one confirmation later
+than the consensus rule actually requires — close the gap by design in
+theory, but off by exactly one block in the wallet's own implementation,
+recreating the dead zone in practice.
+
+**Fix:** added `wallet/staking.cpp::GetStakingBalance()`, a
+staking-specific balance helper that sums `AvailableCoinsForStaking`'s own
+candidate list (whose `min_depth` check already correctly uses
+`nCoinbaseMaturity`, not `+1`) instead of reusing `GetBalance()`'s generic
+trusted-balance figure. Removed the redundant, stricter `IsTxImmature()`
+gate from `AvailableCoinsForStaking` itself (the `min_depth` check a few
+lines later already does the correct, staking-specific job). All three
+call sites (`GetStakeWeight`, `AvailableCoinsForStaking`,
+`CreateCoinStake`) now agree with `pos.cpp`'s validation rule. Ordinary
+wallet balance display (`getbalances`, regular spending) is untouched and
+still correctly requires the more conservative `nCoinbaseMaturity + 1`
+threshold — this fix only changes which coins the *local wallet* is
+willing to attempt staking with, not any network consensus rule, so
+there's no fork risk.
+
+**Verified live on mainnet immediately after the fix:** `getstakinginfo`
+weight went from `0` to `2,800,000,000,000,000` satoshis (exactly block
+1's 28,000,000 CAC coinbase) the moment the rebuilt node restarted; block
+501 was produced within about a minute, correctly flagged
+`"flags": "proof-of-stake"`, consuming block 1's coinbase as the stake
+input and paying a coin-age-proportional reward on top of it
+(`getbalances` showed the new coinstake output as
+`28,011,878.90693625 CAC` under the `"stake"` category). The chain is no
+longer stalled.
+
 ---
 
 ## 7. Supply ceiling — `MAX_MONEY` and the `int64` `CAmount` constraint
