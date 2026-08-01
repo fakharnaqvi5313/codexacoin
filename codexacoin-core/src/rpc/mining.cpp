@@ -964,7 +964,7 @@ static RPCHelpMan submitblock()
     BlockValidationState state;
     Chainstate& active_chainstate = chainman.ActiveChainstate();
     if (!CheckBlock(block, state, Params().GetConsensus(), active_chainstate, true, true, false)) {
-        throw JSONRPCError(-100, "Block failed CheckBlock() function");
+        throw JSONRPCError(-100, "Block failed CheckBlock() function: " + state.ToString());
     }
 
     {
