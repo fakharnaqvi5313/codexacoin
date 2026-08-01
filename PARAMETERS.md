@@ -942,17 +942,62 @@ key is ever lost, previously-stored ID numbers become permanently
 unreadable; nothing downstream ever reads them back programmatically, so
 that's an acceptable tradeoff for this design, not an oversight.
 
-**Not done, and deliberately not attempted**: a referral/"airdrop"
-reward (10% of a referred user's first deposit, paid to the referrer)
-was also requested. Not built yet — the funding source is still
-unresolved. This project's own supply design (§7) is fixed: the premine
-plus ongoing staking rewards, nothing else mints CAC, and there's no dev
-fund (§9 item 8) to draw from. A referral payout has to come from
-somewhere real -- newly minted supply (a consensus-level change),
-deducted from the referred user's own deposit, or paid from the pool's
-fee revenue -- and picking one silently risks either breaking the
-fixed-supply model or creating a solvency problem for other users'
-custodial funds. Revisit once the funding mechanism is actually decided.
+### 13.7 Referral reward — 10% of a referred user's first deposit
+
+Initially deferred (see the original version of this section) because
+the funding source was unresolved, and this project's supply is
+otherwise fixed by design (§7: premine plus ongoing staking rewards,
+nothing else mints CAC, no dev fund per §9 item 8). Clarified 2026-08-01:
+paid from a dedicated `adminwallet`, funded manually by the project
+owner — not newly minted CAC, not deducted from the referred user's own
+deposit, and not drawn from the pool wallet that holds other users'
+custodial funds. This was the deciding factor: it's the only option of
+the three considered that neither touches consensus supply rules nor
+puts other depositors' money at risk.
+
+**How it works** (`vps-gateway/referral.py`):
+- Every user gets a `referral_code` (8 chars) generated at signup.
+  Signup optionally accepts another user's code, recorded as
+  `referred_by`.
+- When a referred user's *first* deposit is marked funded (hooked into
+  `staking.py`'s existing watcher pass, right where a deposit transitions
+  to `active`), the referrer is credited `REFERRAL_REWARD_BP` (default
+  1000 = 10%) of that deposit's satoshi amount into a `referral_credits`
+  ledger row — a bookkeeping entry, not an on-chain transaction yet, same
+  pattern as `stake_rewards`. Guarded against double-crediting (checked
+  by referred-user, not by deposit) and against triggering on any deposit
+  after the user's first.
+- `/v1/referral/status` (auth) returns the caller's own code, how many
+  people they've referred, and available/lifetime credited satoshis.
+- `/v1/referral/withdraw` (auth) sends the caller's full available credit
+  to a specified address from `adminwallet`, mirroring
+  `staking.py`'s `withdraw()` exactly, including its `-6`
+  (insufficient-funds) handling — if `adminwallet` isn't funded, this
+  fails with a clean, expected error rather than a raw RPC failure.
+
+**Verified live** (2026-08-01, without moving any real funds — see below
+for why): signed up a referrer and, using their real referral code,
+signed up a second user; confirmed `referred_by` was set correctly.
+Inserted a test-fixture `active` deposit row (not a real on-chain
+payment — see below) and called `credit_referral_if_eligible()` directly,
+confirming the referrer's `available_satoshis` showed exactly 10% of the
+test amount; called it a second time to confirm no double-credit.
+Called `/v1/referral/withdraw` against the still-empty `adminwallet` and
+confirmed it fails cleanly with the expected "not-found" error rather
+than crashing or silently succeeding, and that the credit remains
+available afterward (not consumed by a failed attempt). All test data
+removed from the production database afterward.
+
+Two things deliberately **not** done as part of this verification, both
+because they'd require actually moving real CAC: no real deposit was
+made to trigger the crediting hook end-to-end through the watcher itself
+(a test-fixture DB row was used instead — this tests the identical code
+path `_mark_funded_deposits()` calls, just without needing a real
+on-chain payment to arrive first), and `adminwallet` was deliberately
+left unfunded — sending it real CAC is a financial transfer, which is
+the project owner's decision and action to take, not something to do
+unilaterally while verifying a feature. Its receive address is
+`CQdsoAbLLYxD8ZAR7yi7PvU4jFg6ccdiW6`; nothing pays out until it's funded.
 
 ---
 

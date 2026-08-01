@@ -28,6 +28,12 @@ Configuration is via environment variables (see README.md):
     GATEWAY_KYC_ENCRYPTION_KEY
                              (Fernet key encrypting signup ID numbers at rest --
                               see kyc.py. Signup returns 503 without it.)
+    GATEWAY_ADMIN_WALLET     (default: adminwallet -- funds referral payouts, see
+                              referral.py. Must be funded manually by the project;
+                              withdrawals fail with a clean error if it's empty.)
+    GATEWAY_REFERRAL_REWARD_BP
+                             (default: 1000 = 10%, see referral.py and
+                              PARAMETERS.md section 13.6)
 
 Fee estimation (/v1/fee-estimate) uses the node's live mempoolminfee and
 mempool fullness as a heuristic -- see that endpoint's own comment for
@@ -45,6 +51,7 @@ from flask_limiter.util import get_remote_address
 import auth
 import db
 import kyc
+import referral
 import rpc
 import staking
 from rpc import RpcError
@@ -357,6 +364,7 @@ def signup():
     date_of_birth = (body.get("date_of_birth") or "").strip()
     id_type = (body.get("id_type") or "").strip().lower()
     id_number = (body.get("id_number") or "").strip()
+    referral_code_used = (body.get("referral_code") or "").strip().upper()
 
     if not email or "@" not in email or len(password) < 8:
         return error("invalid-address", "Valid email and password (>=8 chars) required", 400)
@@ -377,10 +385,31 @@ def signup():
         existing = conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone()
         if existing:
             return error("invalid-address", "An account with that email already exists", 409)
+
+        referred_by = None
+        if referral_code_used:
+            referrer = conn.execute(
+                "SELECT id FROM users WHERE referral_code = ?", (referral_code_used,)
+            ).fetchone()
+            if not referrer:
+                return error("invalid-address", "Unknown referral code", 400)
+            referred_by = referrer["id"]
+
+        # Retry on the astronomically unlikely event of a referral_code
+        # collision (8 chars of a ~32-symbol alphabet) rather than failing
+        # signup outright.
+        for _ in range(5):
+            own_referral_code = referral.generate_referral_code()
+            if not conn.execute(
+                "SELECT 1 FROM users WHERE referral_code = ?", (own_referral_code,)
+            ).fetchone():
+                break
+
         cur = conn.execute(
             """INSERT INTO users
-               (email, password_hash, created_at, full_name, date_of_birth, id_type, id_number_encrypted)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (email, password_hash, created_at, full_name, date_of_birth, id_type, id_number_encrypted,
+                referral_code, referred_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 email,
                 auth.hash_password(password),
@@ -389,6 +418,8 @@ def signup():
                 date_of_birth,
                 id_type,
                 kyc.encrypt_id_number(id_number),
+                own_referral_code,
+                referred_by,
             ),
         )
         conn.commit()
@@ -480,6 +511,33 @@ def staking_withdraw():
     try:
         txid = staking.withdraw(user_id, int(amount), to_address)
     except staking.StakingError as e:
+        return error(e.code, str(e), 400)
+    return jsonify({"txid": txid})
+
+
+@app.route("/v1/referral/status")
+def referral_status():
+    user_id, err = require_auth()
+    if err:
+        return err
+    return jsonify(referral.status_for_user(user_id))
+
+
+@app.route("/v1/referral/withdraw", methods=["POST"])
+@limiter.limit("20 per hour")
+def referral_withdraw():
+    user_id, err = require_auth()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    to_address = body.get("to_address")
+    if not to_address:
+        return error("invalid-address", "to_address is required", 400)
+    if not is_valid_address(to_address):
+        return error("invalid-address", "to_address is not a valid CodexaCoin address", 400)
+    try:
+        txid = referral.withdraw(user_id, to_address)
+    except referral.ReferralError as e:
         return error(e.code, str(e), 400)
     return jsonify({"txid": txid})
 

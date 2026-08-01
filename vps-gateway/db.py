@@ -23,16 +23,18 @@ def init_db():
                 full_name TEXT,
                 date_of_birth TEXT,
                 id_type TEXT,
-                id_number_encrypted TEXT
+                id_number_encrypted TEXT,
+                referral_code TEXT UNIQUE,
+                referred_by INTEGER REFERENCES users(id)
             )
             """
         )
-        # Signup originally had no KYC fields (see PARAMETERS.md section
-        # 13.6) -- ALTER TABLE ADD COLUMN for anyone whose users table
-        # already exists from before these columns were added. SQLite has
-        # no "ADD COLUMN IF NOT EXISTS", so check first.
+        # Signup originally had no KYC/referral fields (see PARAMETERS.md
+        # section 13.6) -- ALTER TABLE ADD COLUMN for anyone whose users
+        # table already exists from before these columns were added.
+        # SQLite has no "ADD COLUMN IF NOT EXISTS", so check first.
         existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
-        for col in ("full_name", "date_of_birth", "id_type", "id_number_encrypted"):
+        for col in ("full_name", "date_of_birth", "id_type", "id_number_encrypted", "referral_code", "referred_by"):
             if col not in existing_cols:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         conn.execute(
@@ -86,6 +88,26 @@ def init_db():
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS referral_credits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referrer_user_id INTEGER NOT NULL REFERENCES users(id),
+                referred_user_id INTEGER NOT NULL REFERENCES users(id),
+                source_deposit_id INTEGER NOT NULL REFERENCES stake_deposits(id),
+                amount_satoshis INTEGER NOT NULL,
+                credited_at REAL NOT NULL,
+                withdrawn_at REAL,
+                withdrawal_txid TEXT
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_referral_credits_referrer ON referral_credits(referrer_user_id)")
+        # ALTER TABLE ADD COLUMN can't express UNIQUE, so enforce it via a
+        # separate index instead -- covers both a fresh CREATE TABLE (whose
+        # inline UNIQUE already exists) and an existing install that just
+        # got the column added above.
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)")
         conn.commit()
 
 

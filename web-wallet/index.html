@@ -109,6 +109,8 @@
           </select>
           <label class="field-label">ID number</label>
           <input id="stake-id-number" type="text" autocomplete="off" />
+          <label class="field-label">Referral code (optional)</label>
+          <input id="stake-referral-code" type="text" autocomplete="off" placeholder="Leave blank if none" />
         </div>
         <div class="row">
           <button class="primary" id="btn-stake-login">Log in</button>
@@ -145,6 +147,19 @@
         <button class="secondary" id="btn-stake-withdraw">Withdraw</button>
         <div class="error" id="staking-action-error"></div>
         <div class="success" id="staking-action-success"></div>
+      </div>
+      <div class="card" id="referral-card" style="display:none">
+        <p class="notice">Share your code. When someone signs up with it and
+           makes their first deposit, you get 10% of that deposit, credited
+           here -- withdraw it to any address whenever you like.</p>
+        <div class="stat-row"><span>Your code</span><span id="stat-referral-code" class="mono">-</span></div>
+        <div class="stat-row"><span>People referred</span><span id="stat-referral-count">0</span></div>
+        <div class="stat-row"><span>Available to withdraw</span><span id="stat-referral-available">0 CAC</span></div>
+        <label class="field-label">Withdraw to address</label>
+        <input id="referral-withdraw-address" />
+        <button class="secondary" id="btn-referral-withdraw">Withdraw referral credit</button>
+        <div class="error" id="referral-action-error"></div>
+        <div class="success" id="referral-action-success"></div>
       </div>
     </section>
 

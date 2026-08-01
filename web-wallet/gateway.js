@@ -55,4 +55,9 @@ export class Gateway {
 
   pushVapidPublicKey() { return this._get("/v1/push/vapid-public-key"); }
   pushSubscribe(token, subscription) { return this._post("/v1/push/subscribe", subscription, { auth: token }); }
+
+  referralStatus(token) { return this._get("/v1/referral/status", { auth: token }); }
+  referralWithdraw(token, toAddress) {
+    return this._post("/v1/referral/withdraw", { to_address: toAddress }, { auth: token });
+  }
 }

@@ -225,6 +225,7 @@ async function loadStaking() {
   document.getElementById("staking-status-card").style.display = stakingLoggedIn() ? "block" : "none";
   document.getElementById("push-card").style.display = stakingLoggedIn() && "serviceWorker" in navigator && "PushManager" in window ? "block" : "none";
   document.getElementById("staking-actions-card").style.display = stakingLoggedIn() ? "block" : "none";
+  document.getElementById("referral-card").style.display = stakingLoggedIn() ? "block" : "none";
   if (!stakingLoggedIn()) return;
   try {
     const status = await state.gateway.stakingStatus(state.stakeToken);
@@ -237,7 +238,17 @@ async function loadStaking() {
       state.stakeToken = null;
       sessionStorage.removeItem("cac_stake_token");
       loadStaking();
+      return;
     }
+  }
+  try {
+    const ref = await state.gateway.referralStatus(state.stakeToken);
+    document.getElementById("stat-referral-code").textContent = ref.referral_code;
+    document.getElementById("stat-referral-count").textContent = ref.referred_count;
+    document.getElementById("stat-referral-available").textContent = `${formatCac(ref.available_satoshis)} CAC`;
+  } catch (e) {
+    // Non-fatal -- staking status above already handles auth expiry; a
+    // referral-status hiccup shouldn't block the rest of the screen.
   }
 }
 
@@ -256,6 +267,7 @@ async function stakeAuth(action) {
         date_of_birth: document.getElementById("stake-dob").value,
         id_type: document.getElementById("stake-id-type").value,
         id_number: document.getElementById("stake-id-number").value.trim(),
+        referral_code: document.getElementById("stake-referral-code").value.trim(),
       };
       result = await state.gateway.signup(email, password, kyc);
     }
@@ -298,6 +310,25 @@ document.getElementById("btn-stake-withdraw").addEventListener("click", async ()
   try {
     const amountSatoshis = Math.round(amountCac * 1e8);
     const result = await state.gateway.stakingWithdraw(state.stakeToken, amountSatoshis, toAddress);
+    okEl.textContent = `Withdrawal broadcast: ${result.txid}`;
+    loadStaking();
+  } catch (e) {
+    errEl.textContent = e instanceof GatewayError ? e.message : String(e);
+  }
+});
+
+document.getElementById("btn-referral-withdraw").addEventListener("click", async () => {
+  const errEl = document.getElementById("referral-action-error");
+  const okEl = document.getElementById("referral-action-success");
+  errEl.textContent = "";
+  okEl.textContent = "";
+  const toAddress = document.getElementById("referral-withdraw-address").value.trim();
+  if (!toAddress) {
+    errEl.textContent = "Enter a destination address.";
+    return;
+  }
+  try {
+    const result = await state.gateway.referralWithdraw(state.stakeToken, toAddress);
     okEl.textContent = `Withdrawal broadcast: ${result.txid}`;
     loadStaking();
   } catch (e) {

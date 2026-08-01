@@ -742,6 +742,32 @@ above.
 
 ---
 
+## Referral reward implemented, once the funding source was resolved
+
+### 2026-08-01
+
+- Follows up on the earlier entry deferring this feature. The funding
+  question was resolved: 10% of a referred user's first deposit, paid
+  from a dedicated `adminwallet` funded manually by the project owner —
+  not newly minted CAC, not deducted from the referred user's deposit,
+  and not drawn from the pool wallet holding other users' funds.
+- `vps-gateway/referral.py`: referral codes generated at signup,
+  crediting hooked into the existing deposit-watcher pass (bookkeeping
+  ledger entry, not an immediate on-chain send), `/v1/referral/status`
+  and `/v1/referral/withdraw` endpoints. Web wallet gained a referral
+  code field at signup and a Referrals card showing your code, referred
+  count, and a withdraw form.
+- Verified the crediting logic and the withdraw endpoint's error path
+  live, without moving any real funds (a real transfer is the project
+  owner's action, not something to execute while verifying a feature) --
+  confirmed exact 10% crediting, no double-credit on a repeat trigger,
+  and a clean failure from the still-unfunded admin wallet with the
+  credit correctly left available afterward. See `PARAMETERS.md`
+  section 13.7 for the full writeup, including the admin wallet's
+  receive address.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

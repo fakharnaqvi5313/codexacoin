@@ -23,6 +23,7 @@ import os
 
 import db
 import push
+import referral
 import rpc
 from rpc import RpcError
 
@@ -121,6 +122,7 @@ def _mark_funded_deposits():
             dep["user_id"], "Deposit received",
             f"Your deposit of {amount_sat / COIN:.8f} CAC is confirmed and will begin staking.",
         )
+        referral.credit_referral_if_eligible(dep["user_id"], dep["id"], amount_sat)
 
 
 def _is_coinstake(tx):
