@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CodexaCoin (CAC) — A modern Proof-of-Stake cryptocurrency</title>
-<meta name="description" content="CodexaCoin (CAC) is a Proof-of-Stake cryptocurrency: a short fixed founder-premine window, coin-age-proportional staking rewards, and a 64-second block target. Currently pre-launch." />
+<title>CodexaCoin (CAC) — A modern, transparent Proof-of-Stake network</title>
+<meta name="description" content="CodexaCoin (CAC) is a live, open-source Proof-of-Stake network with a full product suite: five wallets, a public block explorer, a custodial staking gateway, and GPG-signed releases. Every parameter is documented and verifiable." />
 <link rel="icon" href="/assets/favicon-32.png" />
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
 <link rel="stylesheet" href="/style.css" />
@@ -18,13 +18,15 @@
       <span class="brand-word">CodexaCoin</span>
     </a>
     <nav class="site-nav">
+      <a href="#why">Why CAC</a>
       <a href="#wallets">Wallets</a>
-      <a href="#about">About</a>
+      <a href="#ecosystem">Ecosystem</a>
       <a href="#specs">Specs</a>
       <a href="#roadmap">Roadmap</a>
       <a href="/blockexplorer/">Explorer</a>
+      <a href="https://github.com/fakharnaqvi5313/codexacoin" target="_blank" rel="noopener">GitHub</a>
     </nav>
-    <span class="badge">Early access</span>
+    <span class="badge">Live on mainnet</span>
   </div>
 </header>
 
@@ -32,57 +34,154 @@
 
   <section class="hero wrap">
     <img src="/assets/logo-512.png" alt="CodexaCoin logo" class="hero-logo" />
-    <h1>CodexaCoin</h1>
-    <p class="hero-tag">A modern Proof-of-Stake cryptocurrency —<br class="br-mobile" /> mined transparently, verified rigorously.</p>
-    <p class="hero-status">✅ The founder premine window is complete and checkpointed — the chain is live and staking on mainnet right now. Wallets for macOS, Windows, Linux, Android, and web are all available below. Still open before a formal public launch: real DNS seeds and BIP44 registration — see the roadmap.</p>
+    <p class="hero-eyebrow">Proof-of-Stake · Open source · Verifiable end to end</p>
+    <h1>A cryptocurrency you can<br class="br-mobile" /> actually audit.</h1>
+    <p class="hero-tag">CodexaCoin runs on real, live infrastructure today — not a whitepaper, not a
+      countdown timer. Every consensus parameter is documented, every release is
+      GPG-signed, and every number below comes straight from the running chain.</p>
+    <div class="hero-actions">
+      <a class="btn btn-lg" href="#wallets">Get a wallet</a>
+      <a class="btn btn-lg btn-outline" href="/blockexplorer/">View live chain</a>
+    </div>
+
+    <div class="live-stats" id="live-stats" aria-live="polite">
+      <div class="live-stat">
+        <span class="live-stat-label">Block height</span>
+        <span class="live-stat-value" id="stat-height">—</span>
+      </div>
+      <div class="live-stat">
+        <span class="live-stat-label">Consensus</span>
+        <span class="live-stat-value">Proof-of-Stake</span>
+      </div>
+      <div class="live-stat">
+        <span class="live-stat-label">Founder premine</span>
+        <span class="live-stat-value">14,000,000,000 CAC</span>
+      </div>
+      <div class="live-stat">
+        <span class="live-stat-label">Network difficulty</span>
+        <span class="live-stat-value" id="stat-difficulty">—</span>
+      </div>
+    </div>
+    <p class="live-stats-note">Pulled live from <a href="/blockexplorer/">the public explorer's API</a> on page load — refresh any time to see it move.</p>
+  </section>
+
+  <section class="trust-strip wrap" aria-label="Project credibility signals">
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+      <div><strong>Audited &amp; checkpointed</strong><span>Full 500-block founder premine independently supply-audited to the satoshi and frozen into consensus checkpoints.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg>
+      <div><strong>100% open source</strong><span>Full node, wallets, gateway, and explorer source published on GitHub under the MIT license — nothing closed, nothing hidden.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <div><strong>GPG-signed releases</strong><span>Every downloadable binary ships with SHA256 checksums and a detached GPG signature — verify what you install.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+      <div><strong>Real running network</strong><span>Not a testnet, not a simulation — a live mainnet producing real Proof-of-Stake blocks right now.</span></div>
+    </div>
+  </section>
+
+  <section id="why" class="section wrap">
+    <h2>Why Proof-of-Stake, why now</h2>
+    <div class="prose">
+      <p>
+        Most new chains ask you to trust a roadmap. CodexaCoin's core case is
+        simpler: PoS removes the two things that make Proof-of-Work networks
+        expensive and slow to iterate on — dedicated hardware and unbounded
+        energy draw — and replaces them with a mechanism where the people who
+        hold the coin secure the network. That's a smaller, more auditable
+        design surface, and it's why we could ship a working product suite
+        instead of a whitepaper.
+      </p>
+    </div>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="why-num">01</div>
+        <h3>No mining arms race</h3>
+        <p>After a short, fixed founder premine window, Proof-of-Work is
+          permanently disabled at the protocol level. New blocks come from
+          staking, not hash power — no ASICs, no perpetual electricity bill
+          per block.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-num">02</div>
+        <h3>Coin-age-proportional rewards</h3>
+        <p>Staking rewards scale with how much you hold and how long a coin
+          has been staking, not just raw balance — a formula documented and
+          unit-tested in the codebase, not asserted in marketing copy.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-num">03</div>
+        <h3>A full product suite, not just a coin</h3>
+        <p>Desktop wallets for three platforms, a mobile app, a web wallet, a
+          public block explorer, a merchant checkout widget, and a custodial
+          staking gateway — all live, all built on the same verified core.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-num">04</div>
+        <h3>Documentation as a first-class artifact</h3>
+        <p>Every consensus constant, every design decision, and every bug we
+          found and fixed along the way is written down in the project's own
+          versioned parameter and change log — the same one this site's
+          numbers are pulled from.</p>
+      </div>
+    </div>
   </section>
 
   <section id="wallets" class="section wrap">
     <h2>Get a wallet</h2>
     <div class="prose">
       <p>
-        All three talk to the same live CodexaCoin mainnet. No token sale, no
-        exchange listing — these are wallets for a real, running chain, not a
-        pre-launch signup.
+        All five talk to the same live CodexaCoin mainnet. No token sale, no
+        exchange listing gate — these are wallets for a real, running chain,
+        not a pre-launch signup form.
       </p>
     </div>
     <div class="wallets-grid">
       <div class="wallet-card">
+        <div class="wallet-icon">🖥️</div>
         <h3>Desktop (macOS)</h3>
         <p>Full node + staking wallet, with a graphical interface.</p>
         <a class="btn" href="/downloads/CodexaCoin-Core-macOS.dmg">Download .dmg</a>
         <p class="wallet-note">Unsigned build (no Apple Developer ID yet) — macOS will warn it's from an unidentified developer. Right-click the app → Open to run it anyway.</p>
       </div>
       <div class="wallet-card">
+        <div class="wallet-icon">📱</div>
         <h3>Mobile (Android)</h3>
-        <p>Send, receive, and track staking status from your phone.</p>
+        <p>Send, receive, and manage staking from your phone.</p>
         <a class="btn" href="/downloads/CodexaCoin-android.apk">Download .apk</a>
         <p class="wallet-note">Direct install, not on the Play Store yet — you'll need to allow installs from unknown sources.</p>
       </div>
       <div class="wallet-card">
+        <div class="wallet-icon">🌐</div>
         <h3>Web wallet</h3>
         <p>No install — send, receive, and stake from any browser.</p>
         <a class="btn" href="/wallet/">Open web wallet</a>
         <p class="wallet-note">Custodial: the staking pool holds keys for pooled staking. See the wallet's own docs for what that means.</p>
       </div>
       <div class="wallet-card">
+        <div class="wallet-icon">🪟</div>
         <h3>Desktop (Windows)</h3>
         <p>Full node + wallet, command-line only for now (no graphical window yet).</p>
         <a class="btn" href="/downloads/CodexaCoin-Core-win64.zip">Download .zip</a>
-        <p class="wallet-note">Unsigned — no paid code-signing certificate yet, so Windows SmartScreen will warn on first run. Verify the download with GPG/SHA256 below instead; see the verification section for why that's the honest alternative to "no warning at all."</p>
+        <p class="wallet-note">Unsigned — no paid code-signing certificate yet, so Windows SmartScreen will warn on first run. Verify with GPG/SHA256 below instead.</p>
       </div>
       <div class="wallet-card">
+        <div class="wallet-icon">🐧</div>
         <h3>Desktop (Linux)</h3>
         <p>Full node + graphical wallet, built and tested on Ubuntu 22.04 x86_64.</p>
         <a class="btn" href="/downloads/CodexaCoin-Core-x86_64-linux-gnu.tar.gz">Download .tar.gz</a>
-        <p class="wallet-note">Needs Qt5 + standard libs from your distro's package manager — see the README inside the archive. No OS-level "unverified publisher" warning on Linux; verify with GPG/SHA256 below anyway.</p>
+        <p class="wallet-note">Needs Qt5 + standard libs from your distro's package manager — see the README inside the archive.</p>
       </div>
     </div>
     <p class="specs-note">
       iOS builds aren't available yet — see the roadmap below.
     </p>
 
-    <div class="prose" id="verify-downloads" style="margin-top:32px">
+    <div class="prose" id="verify-downloads" style="margin-top:40px">
       <h3>Verifying a download</h3>
       <p>
         None of these binaries carry a paid code-signing certificate (Windows
@@ -112,26 +211,36 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS/Linux
     </div>
   </section>
 
-  <section id="about" class="section wrap">
-    <h2>What is CodexaCoin?</h2>
+  <section id="ecosystem" class="section wrap">
+    <h2>One codebase, a full ecosystem</h2>
     <div class="prose">
       <p>
-        CodexaCoin (ticker <strong>CAC</strong>) is a Proof-of-Stake (PoS) cryptocurrency,
-        forked from the Blackcoin More codebase and rebuilt with its own consensus
-        parameters, staking-reward formula, and full application stack — desktop
-        wallet, mobile wallet, block explorer, and a custodial staking service.
+        CodexaCoin isn't just a fork with a new ticker. It's a complete,
+        working stack — the kind of infrastructure a network needs before it
+        can support real usage, not after.
       </p>
-      <p>
-        Instead of ongoing energy-intensive mining, new blocks after the initial
-        founder-premine window are produced by <strong>staking</strong>: coin holders
-        who keep their wallet online periodically "mint" new blocks in proportion to
-        the coins they hold, and are rewarded for it. There's no ongoing hardware
-        arms race and no perpetual electricity cost per block.
-      </p>
-      <p>
-        The project is open source under the MIT license, inheriting its lineage
-        from Bitcoin Core, Peercoin, and Blackcoin.
-      </p>
+    </div>
+    <div class="eco-grid">
+      <a class="eco-card" href="/blockexplorer/">
+        <h3>Block explorer</h3>
+        <p>Search blocks, transactions, and addresses; a live rich list and supply chart, all served from a real indexed backend.</p>
+        <span class="eco-link">Open explorer →</span>
+      </a>
+      <a class="eco-card" href="https://github.com/fakharnaqvi5313/codexacoin/tree/master/vps-gateway" target="_blank" rel="noopener">
+        <h3>Staking gateway</h3>
+        <p>A REST API backing the mobile and web wallets' custodial staking pool — deposit, withdraw, and reward accounting, all auditable in the source.</p>
+        <span class="eco-link">View source →</span>
+      </a>
+      <a class="eco-card" href="https://github.com/fakharnaqvi5313/codexacoin/tree/master/checkout-widget" target="_blank" rel="noopener">
+        <h3>Merchant checkout widget</h3>
+        <p>An embeddable payment widget so any site can accept CAC directly — built alongside the wallets, not bolted on afterward.</p>
+        <span class="eco-link">View source →</span>
+      </a>
+      <a class="eco-card" href="https://github.com/fakharnaqvi5313/codexacoin" target="_blank" rel="noopener">
+        <h3>Full source, MIT-licensed</h3>
+        <p>Every component above — node, wallets, gateway, explorer, checkout widget — in one public repository.</p>
+        <span class="eco-link">Browse GitHub →</span>
+      </a>
     </div>
   </section>
 
@@ -154,6 +263,34 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS/Linux
     </p>
   </section>
 
+  <section id="honesty" class="section wrap">
+    <h2>What we won't tell you</h2>
+    <div class="prose">
+      <p>
+        A lot of crypto marketing quietly omits the early-stage risks. We'd
+        rather you hear them from us first:
+      </p>
+    </div>
+    <div class="honesty-grid">
+      <div class="honesty-item">
+        <h3>Supply is concentrated today</h3>
+        <p>The founder premine currently sits in a small number of wallets. It hasn't been distributed through an exchange or public sale — check the <a href="/blockexplorer/">explorer's rich list</a> yourself rather than taking our word for it.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>No exchange listing yet</h3>
+        <p>CAC isn't listed anywhere. There's no market price, no liquidity, and no guarantee either will exist. Anyone telling you otherwise about this project is wrong.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>Desktop builds are unsigned</h3>
+        <p>We haven't purchased code-signing certificates yet, so your OS will show a warning on first launch. We explain exactly why, and give you a real way to verify authenticity instead.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>This is not investment advice</h3>
+        <p>Nothing on this site is an offer, solicitation, or recommendation to buy, sell, or hold any asset. Evaluate the code and the risks yourself.</p>
+      </div>
+    </div>
+  </section>
+
   <section id="roadmap" class="section wrap">
     <h2>Roadmap</h2>
     <ol class="roadmap">
@@ -161,22 +298,69 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS/Linux
       <li class="done"><span class="rm-num">2</span><div><h3>Testnet &amp; regtest validation</h3><p>Multi-node staking, premine, and PoW-rejection verified end-to-end.</p></div></li>
       <li class="done"><span class="rm-num">3</span><div><h3>Desktop wallets</h3><p>Qt wallet with staking controls; macOS and Linux builds verified with a graphical window, Windows built and verified (CLI only for now).</p></div></li>
       <li class="done"><span class="rm-num">4</span><div><h3>Light-wallet backend</h3><p>Electrum-protocol server and mobile API gateway spec.</p></div></li>
-      <li class="done"><span class="rm-num">5</span><div><h3>Mobile wallets</h3><p>Send/receive, staking status, verified on Android.</p></div></li>
+      <li class="done"><span class="rm-num">5</span><div><h3>Mobile wallets</h3><p>Send/receive, staking status, custodial staking sign-up/deposit/withdraw — verified live on Android.</p></div></li>
       <li class="done"><span class="rm-num">6</span><div><h3>Staking service &amp; web wallet</h3><p>Custodial staking pool and browser-based wallet, verified against a real node.</p></div></li>
       <li class="done"><span class="rm-num">7</span><div><h3>Explorer &amp; launch readiness</h3><p>Public block explorer, multisig support, merchant checkout widget, this site.</p></div></li>
       <li class="done"><span class="rm-num">8</span><div><h3>Founder premine mining</h3><p>Complete — all 500 blocks mined, audited exact, and checkpointed. The chain has been staking (Proof-of-Stake) ever since.</p></div></li>
-      <li class="done"><span class="rm-num">9</span><div><h3>Wallets live</h3><p>Desktop (macOS, Windows, Linux), Android, and web wallet all available now — see above.</p></div></li>
+      <li class="done"><span class="rm-num">9</span><div><h3>Wallets live, source public</h3><p>Desktop (macOS, Windows, Linux), Android, and web wallet all available now; full source published on GitHub under MIT.</p></div></li>
       <li class="upcoming"><span class="rm-num">→</span><div><h3>Formal public launch</h3><p>Real DNS seed hostnames and BIP44 coin-type registration still to come, plus a graphical Windows wallet and paid code-signing certificates to remove the OS security warnings.</p></div></li>
     </ol>
+  </section>
+
+  <section id="faq" class="section wrap">
+    <h2>Questions we get asked</h2>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Is CodexaCoin audited by a third party?</summary>
+        <p>Not by an external security firm — the codebase is a fork of Blackcoin More (itself descended from Bitcoin Core and Peercoin), and every consensus-relevant change we made is documented with the reasoning behind it in <code>PARAMETERS.md</code>. The premine mint itself was self-audited to the satoshi with a published script; anyone can re-run it against the chain. That's a meaningfully lower bar than a paid third-party audit, and we say so plainly.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Where does the founder premine go?</summary>
+        <p>It was mined into wallets controlled by the project during a fixed, protocol-limited 500-block window, then Proof-of-Work was permanently disabled. There is no ongoing or hidden minting after that point — new supply only comes from documented Proof-of-Stake rewards.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is there a dev fund or ongoing allocation?</summary>
+        <p>No. The dev-fund mechanism exists in the code but is disabled on every network. If that ever changes, it'll be a visible, documented protocol change — not a silent one.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I run my own node?</summary>
+        <p>Yes — the full node source is public on GitHub, builds on macOS, Windows, and Linux, and connects to the same live network every wallet on this page uses.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is the custodial staking pool the only way to stake?</summary>
+        <p>No — the desktop wallet stakes directly from your own node with your own keys, no custodian involved. The pool exists for mobile/web users who want staking without running a node themselves, and it's clearly labeled as custodial everywhere it appears.</p>
+      </details>
+    </div>
   </section>
 
 </main>
 
 <footer class="site-footer">
-  <div class="wrap">
-    <p>© 2026 CodexaCoin. Open source under the MIT license.</p>
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/fakharnaqvi5313/codexacoin" target="_blank" rel="noopener">GitHub</a>
+      <a href="/blockexplorer/">Explorer</a>
+      <a href="#wallets">Wallets</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <p>© 2026 CodexaCoin. Open source under the MIT license. Nothing on this site is financial advice.</p>
   </div>
 </footer>
+
+<script>
+(function () {
+  var fmt = function (n) { return Number(n).toLocaleString('en-US'); };
+  fetch('/api/stats').then(function (r) { return r.json(); }).then(function (d) {
+    var h = document.getElementById('stat-height');
+    var diff = document.getElementById('stat-difficulty');
+    if (h && d.height != null) h.textContent = fmt(d.height);
+    if (diff && d.difficulty != null) diff.textContent = fmt(Math.round(d.difficulty));
+  }).catch(function () {
+    var live = document.getElementById('live-stats');
+    if (live) live.style.display = 'none';
+  });
+})();
+</script>
 
 </body>
 </html>

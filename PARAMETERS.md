@@ -1593,6 +1593,66 @@ an instrumented `setInterval`/`clearInterval` wrapper to be created
 exactly once per home-page visit and cleared exactly once per
 navigation away, across repeated round-trips — no leaked intervals.
 
+### 16.6 Marketing site content/design overhaul (2026-08-03)
+
+Full rewrite of `website/index.html` and `style.css` at the project
+owner's request for content that reads as professional and credible to
+an investor/evaluator audience, and a more polished visual design.
+Deliberately did **not** take that as license to write typical crypto
+hype copy — every new claim ties back to something already documented
+and verifiable elsewhere in this project, and a dedicated section says
+plainly what a reader should be skeptical of. Specifically:
+
+- **New hero**: a live stats bar (block height, difficulty) fetched
+  client-side from the explorer's own `/api/stats` on page load —
+  fails gracefully (hides itself) if the fetch errors, so a broken API
+  can't leave a blank gap. This replaced a static "pre-launch" framing
+  with something no vaporware site can copy: real numbers from a real,
+  currently-running chain, visibly changing on refresh.
+- **New trust strip**: four credibility signals (audited premine, open
+  source, GPG-signed releases, real running network), each pointing at
+  something already true and already documented elsewhere on this site
+  or in this repo — not new claims invented for the redesign.
+- **New "Why Proof-of-Stake, why now" section**: reframes existing
+  technical facts (PoW permanently disabled after the premine window,
+  coin-age-proportional rewards, the full product suite, the
+  documentation discipline) as reader-facing value propositions,
+  without adding anything not already true.
+- **New "One codebase, a full ecosystem" section**: links out to the
+  explorer, the gateway and checkout-widget source, and the newly
+  public GitHub repo — makes the case that this is a working product
+  suite, not a single-purpose token site.
+- **New "What we won't tell you" section**: explicit, unhedged
+  disclosure of the project's actual early-stage risks — supply
+  currently concentrated in a small number of wallets (verifiable on
+  the rich list, linked directly), no exchange listing, no market
+  price, unsigned desktop builds, and a plain "this is not investment
+  advice, nothing here is a solicitation" statement. Included
+  deliberately: a site asking to be taken seriously by investors should
+  volunteer the caveats a serious investor would ask for anyway, not
+  wait to be asked.
+- **New FAQ**: answers the obvious follow-up questions (third-party
+  audit status, premine destination, dev fund, running your own node,
+  whether custodial staking is the only option) as directly as the
+  rest of the site — e.g. "Not by an external security firm" rather
+  than a vague non-answer.
+- Roadmap item 9 updated to also credit the public GitHub repo; nav and
+  footer both gained GitHub/Explorer links.
+- Visual: kept the existing dark cyan/blue/gold palette and animation
+  conventions rather than replacing them, but added a live-updating
+  status badge, icon-led credibility cards, a proper button hierarchy
+  (primary gradient + outline secondary), and a native `<details>`-based
+  FAQ accordion (no JS framework, no external dependency).
+
+**Verified live**, not just visually inspected: fetched the deployed
+page's live-stats values against `/api/stats` directly and confirmed
+they matched (block height, difficulty), checked the browser console
+for errors (none), and checked computed grid layouts via JS at both a
+375px mobile width and a 1280px desktop width to confirm every new
+multi-column section (trust strip, "why" cards, wallet cards, ecosystem
+cards) actually laid out into clean columns rather than silently
+collapsing.
+
 ## 17. Deferred: governance and hardware wallet support
 
 Two further ideas came up in the same "what else should we add?" pass

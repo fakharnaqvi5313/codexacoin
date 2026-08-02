@@ -915,6 +915,33 @@ above.
 
 ---
 
+## Website content and design overhaul
+
+### 2026-08-03
+
+- Rewrote `website/index.html`/`style.css` for a more professional,
+  investor-credible presentation, per explicit request. Every new claim
+  ties to something already true and documented elsewhere in this
+  project -- no hype copy, no invented statistics.
+- New: a hero stats bar pulling real numbers (block height, difficulty)
+  live from the explorer's `/api/stats` on page load; a credibility
+  strip (audited premine, open source, GPG-signed releases, real
+  running network); a "Why Proof-of-Stake" section; an "ecosystem"
+  section linking the explorer, gateway, checkout widget, and the newly
+  public GitHub repo; an explicit "What we won't tell you" section
+  disclosing the project's actual early-stage risks (concentrated
+  supply, no exchange listing, unsigned builds, not investment advice);
+  and an FAQ.
+- Kept the existing dark cyan/blue/gold visual language, added a
+  live-updating status badge, icon-led cards, a primary/outline button
+  hierarchy, and a dependency-free `<details>`-based FAQ accordion.
+- Verified live: fetched stats match the deployed page, no console
+  errors, and multi-column layouts confirmed via computed styles at
+  both mobile and desktop widths.
+- See `PARAMETERS.md` section 16.6 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
