@@ -3,12 +3,18 @@ name: release
 # Builds Linux (tarball + .deb), Windows (NSIS installer), and macOS (.dmg)
 # desktop wallet artifacts on tag push and attaches them to a GitHub
 # Release. Cross-compiles for Linux and Windows on an Ubuntu runner via the
-# depends/ system (same proven approach as .github/workflows/build.yml's CI
-# matrix, which already builds+tests these exact targets on every push --
-# this workflow reuses those matrix configs rather than re-deriving them).
-# macOS builds natively on a macos runner (no cross-compilation needed) so
-# it can use the same locally-verified `contrib/macdeploy/build_dmg.sh`
-# path used for local development builds.
+# depends/ system (same proven approach as codexacoin-core/.github/workflows
+# /build.yml's CI matrix, which already builds+tests these exact targets on
+# every push -- this workflow reuses those matrix configs rather than
+# re-deriving them). macOS builds natively on a macos runner (no
+# cross-compilation needed) so it can use the same locally-verified
+# `contrib/macdeploy/build_dmg.sh` path used for local development builds.
+#
+# Lives at the CodexaCloud monorepo root (not inside codexacoin-core/)
+# because GitHub Actions only discovers workflows under the repository
+# root's .github/workflows/ -- every build step below runs with
+# working-directory: codexacoin-core to compensate, since the actual
+# source tree is one level down from here.
 #
 # Codesigning/notarization for macOS and Authenticode signing for Windows
 # are NOT done here -- see the TODO comments below and
@@ -33,6 +39,9 @@ jobs:
   linux:
     name: linux-x86_64
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: codexacoin-core
     steps:
       - uses: actions/checkout@v5
 
@@ -46,8 +55,8 @@ jobs:
       - name: Dependency cache
         uses: actions/cache@v4.3.0
         with:
-          path: ./depends/built
-          key: release-linux-64-bit-depends-${{ hashFiles('depends/packages/*') }}
+          path: ./codexacoin-core/depends/built
+          key: release-linux-64-bit-depends-${{ hashFiles('codexacoin-core/depends/packages/*') }}
 
       - name: Build depends
         run: make -j "$MAKEJOBS" -C depends HOST=x86_64-pc-linux-gnu
@@ -81,7 +90,7 @@ jobs:
             --architecture amd64 \
             --description "CodexaCoin (CAC) full node and CLI" \
             --license MIT \
-            --url "https://github.com/codexacoin/codexacoin-core" \
+            --url "https://github.com/fakharnaqvi5313/codexacoin" \
             --maintainer "CodexaCoin developers" \
             depends/x86_64-pc-linux-gnu/bin/codexacoind=/usr/bin/codexacoind \
             depends/x86_64-pc-linux-gnu/bin/codexacoin-cli=/usr/bin/codexacoin-cli \
@@ -91,13 +100,16 @@ jobs:
         with:
           name: linux-x86_64
           path: |
-            *.tar.gz
-            *.deb
+            codexacoin-core/*.tar.gz
+            codexacoin-core/*.deb
           if-no-files-found: error
 
   windows:
     name: windows-x86_64
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: codexacoin-core
     steps:
       - uses: actions/checkout@v5
 
@@ -112,8 +124,8 @@ jobs:
       - name: Dependency cache
         uses: actions/cache@v4.3.0
         with:
-          path: ./depends/built
-          key: release-windows-64-bit-depends-${{ hashFiles('depends/packages/*') }}
+          path: ./codexacoin-core/depends/built
+          key: release-windows-64-bit-depends-${{ hashFiles('codexacoin-core/depends/packages/*') }}
 
       - name: Build depends
         run: make -j "$MAKEJOBS" -C depends HOST=x86_64-w64-mingw32
@@ -128,19 +140,22 @@ jobs:
       # TODO: sign the installer with a real Authenticode certificate before
       # any public distribution, e.g.:
       #   osslsigncode sign -certs cert.pem -key key.pem \
-      #     -n "CodexaCoin Core" -i https://codexacoin.example \
+      #     -n "CodexaCoin Core" -i https://codexacoin.com \
       #     -in codexacoin-*-win64-setup.exe -out codexacoin-*-win64-setup-signed.exe
       # This repo has no such certificate; artifacts here are unsigned and
       # will trigger Windows SmartScreen warnings.
       - uses: actions/upload-artifact@v4.6.2
         with:
           name: windows-x86_64
-          path: "*win64-setup.exe"
+          path: "codexacoin-core/*win64-setup.exe"
           if-no-files-found: error
 
   macos:
     name: macos-x86_64
     runs-on: macos-13 # x86_64 runner; matches this project's local dev build target
+    defaults:
+      run:
+        working-directory: codexacoin-core
     steps:
       - uses: actions/checkout@v5
 
@@ -166,7 +181,7 @@ jobs:
       - uses: actions/upload-artifact@v4.6.2
         with:
           name: macos-x86_64
-          path: "*.dmg"
+          path: "codexacoin-core/*.dmg"
           if-no-files-found: error
 
   publish-release:
