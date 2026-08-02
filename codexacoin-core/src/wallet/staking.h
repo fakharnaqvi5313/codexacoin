@@ -8,6 +8,7 @@
 #ifndef CODEXACOIN_WALLET_STAKE_H
 #define CODEXACOIN_WALLET_STAKE_H
 
+#include <cstdint>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
 

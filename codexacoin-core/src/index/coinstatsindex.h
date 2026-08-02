@@ -5,6 +5,7 @@
 #ifndef BITCOIN_INDEX_COINSTATSINDEX_H
 #define BITCOIN_INDEX_COINSTATSINDEX_H
 
+#include <cstdint>
 #include <crypto/muhash.h>
 #include <index/base.h>
 

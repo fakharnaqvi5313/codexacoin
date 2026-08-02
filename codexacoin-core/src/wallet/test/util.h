@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_TEST_UTIL_H
 #define BITCOIN_WALLET_TEST_UTIL_H
 
+#include <cstdint>
 #include <addresstype.h>
 #include <wallet/db.h>
 

@@ -5,6 +5,7 @@
 #ifndef BITCOIN_KERNEL_DISCONNECTED_TRANSACTIONS_H
 #define BITCOIN_KERNEL_DISCONNECTED_TRANSACTIONS_H
 
+#include <cstdint>
 #include <core_memusage.h>
 #include <memusage.h>
 #include <primitives/transaction.h>

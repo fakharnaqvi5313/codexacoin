@@ -5,6 +5,7 @@
 #ifndef BITCOIN_HEADERSSYNC_H
 #define BITCOIN_HEADERSSYNC_H
 
+#include <cstdint>
 #include <arith_uint256.h>
 #include <chain.h>
 #include <consensus/params.h>

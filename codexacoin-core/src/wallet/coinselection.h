@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_COINSELECTION_H
 #define BITCOIN_WALLET_COINSELECTION_H
 
+#include <cstdint>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <outputtype.h>

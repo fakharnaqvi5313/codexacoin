@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_RPC_UTIL_H
 #define BITCOIN_WALLET_RPC_UTIL_H
 
+#include <cstdint>
 #include <rpc/util.h>
 #include <script/script.h>
 #include <wallet/wallet.h>

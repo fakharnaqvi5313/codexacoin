@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_EXTERNAL_SIGNER_SCRIPTPUBKEYMAN_H
 #define BITCOIN_WALLET_EXTERNAL_SIGNER_SCRIPTPUBKEYMAN_H
 
+#include <cstdint>
 #include <wallet/scriptpubkeyman.h>
 
 #include <memory>

@@ -6,6 +6,7 @@
 #ifndef BITCOIN_SCRIPT_SIGN_H
 #define BITCOIN_SCRIPT_SIGN_H
 
+#include <cstdint>
 #include <attributes.h>
 #include <coins.h>
 #include <hash.h>
