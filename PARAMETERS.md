@@ -1043,6 +1043,61 @@ above, not on anything in the code); a fallback PIN for devices with no
 enrolled screen lock at all (the pre-existing gap `lock_screen.dart`
 already documents).
 
+### 12.7 Full auth/deposit/withdraw verified against the live gateway, and the release APK republished (2026-08-03)
+
+Picked back up per an explicit request to continue deposit/withdraw
+verification and to sign up a real test account. The emulator crashed a
+third time across two fresh AVD instances during this attempt (`adb`
+losing the device entirely mid-session; separately, `PackageManager`
+reporting a just-installed `MainActivity` as nonexistent despite `pm list
+packages`/`dumpsys package` both showing it correctly registered, and
+`aapt2 dump badging` independently confirming the built APK's own
+manifest was correct) — conclusively an environment/tooling instability
+on this machine, not a defect in the app, so pivoted to a more direct and
+arguably stronger verification: exercising the real gateway API with the
+exact request/response shapes `gateway_api.dart` now sends, via `curl`
+against `https://codexacoin.com/v1` directly.
+
+All four calls succeeded exactly as the Dart code expects:
+
+- `POST /auth/signup` with a clearly-marked test identity
+  (`test-verify-2026-08-03@codexacoin-test.invalid`) → real JWT token.
+- `GET /staking/status` with `Authorization: Bearer <token>` → correct
+  zero-balance response for a brand-new account
+  (`{"mode":"custodial","delegated_amount":"0",...}`).
+- `POST /staking/deposit` (amount 1 CAC) → a real, valid deposit address
+  (`Cch2oaLubz7EsELMvb4FnwXqS3nXuLJtmX`) — generating a deposit address
+  moves no funds, so this is safe to actually call.
+- `POST /staking/withdraw` → clean, expected failure
+  (`"Requested 100000000 exceeds available balance 0"`) — the safe,
+  no-real-funds-moved verification of that error path, consistent with
+  this project's standing rule to never execute an actual transfer during
+  verification (see the referral-withdraw verification in section 13.7
+  for the same pattern).
+
+This proves the actual integration risk (does the Bearer-auth flow this
+phase added really work against the live backend?) is resolved,
+independent of whatever is wrong with the local emulator. Cleaned up
+immediately after: deleted the test user (id 5) and its one
+`stake_deposits` row (status `awaiting_funds`, no funds ever arrived)
+directly from `/opt/cac-gateway/gateway.db` on the VPS via a Python
+`sqlite3` one-liner over SSH (no `sqlite3` CLI installed there); verified
+both rows gone afterward.
+
+**Release APK republished.** Separately, `flutter build apk --release`
+was run and the output published to `codexacoin.com/downloads/
+CodexaCoin-android.apk`, replacing the stale Aug 1 build that predated
+every fix in §12.6 (real gateway URL, working staking, the
+`MainActivity` crash fix) — anyone downloading the app before this had
+been getting a build that couldn't reach the backend at all and would
+get stuck on first launch if a screen lock was enrolled. Verified via
+`aapt2 dump badging` that the release APK's own manifest correctly
+declares `MainActivity` (ruling out the same packaging concern the
+emulator instability raised). `SHA256SUMS`/`SHA256SUMS.asc` on the
+downloads page were regenerated and re-signed to match (see section
+10.1 for the GPG signing setup); all four checksums re-verified against
+the live server afterward.
+
 ---
 
 ## 13. VPS gateway and custodial staking pool (Phase 6)

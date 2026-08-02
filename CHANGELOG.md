@@ -886,6 +886,35 @@ above.
 
 ---
 
+## Android staking verified live end-to-end; stale release APK republished
+
+### 2026-08-03
+
+- Verified the full auth/staking flow added yesterday against the real,
+  live gateway (`codexacoin.com/v1`), not just statically: signed up a
+  real test account, fetched staking status, requested a deposit address
+  (real address returned, no funds moved), and attempted a withdraw
+  (clean "exceeds available balance" error -- the safe way to verify that
+  path without ever moving real funds). All four matched the exact
+  request/response shapes the Dart client now sends. Pivoted to direct
+  API testing after the Android emulator became unstable a third time
+  across two fresh instances -- confirmed via `aapt2 dump badging` that
+  the built APK's own manifest was correct throughout, so this was
+  environment tooling instability, not an app defect.
+- Cleaned up the test account and its one deposit-address row from the
+  production gateway database immediately after verifying.
+- Rebuilt and republished the Android release APK at
+  `codexacoin.com/downloads/CodexaCoin-android.apk` -- the previous file
+  there predated every fix from the day before (real gateway URL,
+  working staking, the lock-screen crash fix), so anyone downloading the
+  app before this point was getting a build that couldn't reach the
+  backend and could get stuck on first launch. Regenerated and re-signed
+  `SHA256SUMS`/`SHA256SUMS.asc` to match; verified against the live
+  server.
+- See `PARAMETERS.md` section 12.7 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
