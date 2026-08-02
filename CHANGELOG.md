@@ -822,6 +822,40 @@ above.
 
 ---
 
+## Real Windows and Linux builds, GPG-signed and published
+
+### 2026-08-02
+
+- Asked directly how to handle the request to make downloads warning-free:
+  paid code-signing certificates (Windows Authenticode, Apple notarization)
+  need real purchases and business/identity verification this project
+  can't do unilaterally. Decided: ship real Windows/Linux binaries now with
+  GPG signing + SHA256 checksums (free, same scheme Bitcoin Core uses),
+  revisit paid certificates later.
+- **Windows** (mingw-w64, CLI only): found and fixed two real portability
+  bugs that only surfaced on an actual cross-compile attempt -- ~50
+  headers missing an explicit `<cstdint>` include (mingw's libstdc++
+  doesn't transitively pull it in the way macOS's libc++ does), and a
+  `libbitcoinconsensus` shared-library link conflict (fixed via
+  `--disable-shared`). Produces real, working `codexacoind.exe`/
+  `codexacoin-cli.exe`/etc.
+- **Linux** (native Ubuntu 22.04 build inside Docker, full Qt GUI):
+  live-verified, not just compiled -- ran the resulting `codexacoind`
+  on regtest inside the container and got a real address back from
+  `getnewaddress`.
+- Generated a real GPG release-signing key, computed `SHA256SUMS` across
+  all four release artifacts (macOS, Windows, Linux, Android), signed it,
+  and published everything to `codexacoin.com/downloads/` alongside the
+  public key. Verified all four checksums against the live server after
+  upload. Website gained Windows/Linux wallet cards and a "Verifying a
+  download" section explaining plainly that GPG/checksum verification
+  proves authenticity but does not suppress OS security warnings -- only
+  a paid certificate does that.
+- See `PARAMETERS.md` section 10.1 for the full writeup, and section 9
+  item 9 (now closed).
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

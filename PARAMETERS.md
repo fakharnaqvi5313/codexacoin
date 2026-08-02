@@ -657,34 +657,32 @@ the daemon has been run against them (see §6.1).
 8. Generate a dev fund address and decide whether to enable the donation
    feature (currently disabled — `vDevFundAddress` is empty on every network,
    see `kernel/chainparams.cpp`).
-9. Actually produce Windows and Linux desktop build artifacts. Phase 3
-   wrote the cross-compilation config (`.github/workflows/release.yml`,
-   reusing the proven Ubuntu-runner + `depends/` matrix from the existing
-   `build.yml` CI) but could not produce either **locally** in this
-   session's macOS-only, no-Docker environment:
-   - **Windows**: the mingw-w64 cross-compiler is installed and works (Boost
-     and libevent built successfully via `depends/`), but the Qt 5.15.10
-     source download from `download.qt.io` reset mid-transfer on two
-     separate attempts at a similar point (~15-30% through the 48MB file),
-     and the depends system's own fallback mirror
-     (`bitcoincore.org/depends-sources`) 404s for this exact filename. This
-     reads as an environment-specific network constraint (a proxy or
-     egress limit on that specific host), not a toolchain problem — GitHub
-     Actions' own network won't have the same issue.
-   - **Linux**: `depends/hosts/linux.mk` expects a pre-installed
-     `x86_64-pc-linux-gnu` cross-compiler on `PATH` (matching Ubuntu's
-     `apt-get install g++` pattern in `build.yml`'s CI matrix); it does not
-     build one from scratch, and none is available via Homebrew in a
-     supported form. The standard way to produce Linux binaries from a
-     macOS host is Docker or a Linux VM, neither available this session
-     (see the same limitation noted for Phase 2's Docker Compose
-     environment).
+9. ~~Actually produce Windows and Linux desktop build artifacts~~ —
+   **done 2026-08-02** (retried after Docker became available in this
+   environment; see §10.1 for the full writeup):
+   - **Windows** (x86_64, CLI only — no Qt): built via the mingw-w64
+     cross-compiler using `depends/` (`NO_QT=1`, `--disable-shared`).
+     Produces real, working `codexacoind.exe`/`codexacoin-cli.exe`/
+     `codexacoin-tx.exe`/`codexacoin-util.exe`/`codexacoin-wallet.exe`
+     (valid PE32+ executables, confirmed via `file`). Uncovered and fixed
+     two real portability bugs along the way (missing `<cstdint>` includes
+     across ~50 headers, and a stack-protector library link conflict) —
+     see §10.1. Not runtime-tested on actual Windows or under Wine (Wine's
+     own cask install failed/deprecated in this environment); verified by
+     successful cross-compilation, linking, and PE format validation only.
+   - **Linux** (x86_64, full GUI): built natively inside an Ubuntu 22.04
+     Docker container (`apt`-installed Qt5/boost/etc., no depends/ cross
+     toolchain needed for this leg). Produces `codexacoin-qt`,
+     `codexacoind`, `codexacoin-cli`, and the rest. **Live-verified**. not
+     just compiled: ran `codexacoind` inside the container on regtest,
+     called `createwallet`/`getnewaddress` over RPC, got a real address
+     back.
 
-   Net effect: `.github/workflows/release.yml` is real, reviewed
-   configuration that reuses an already-proven CI matrix, but it has not
-   been run end-to-end (needs an actual GitHub Actions run against a
-   pushed tag to fully verify) — the macOS leg is the only one locally
-   built and verified.
+   Both packaged (`CodexaCoin-Core-win64.zip`,
+   `CodexaCoin-Core-x86_64-linux-gnu.tar.gz`), GPG-signed, and published —
+   see §10.1. `.github/workflows/release.yml` (Phase 3) still hasn't been
+   run end-to-end on GitHub Actions itself, but the actual deliverable
+   (working binaries on the website) no longer depends on that.
 10. ~~Investigate: P2P connections between the Mac's node and the VPS's
     explorer-support node never succeeded~~ — **root-caused and fixed
     2026-08-01, no code changes needed.** Initially looked like a
@@ -752,6 +750,85 @@ cert), so this is a real TODO, not an oversight:
   `Release` file at the *repository* level (e.g. an APT repo), not
   per-package — not applicable until there's an actual package repository
   to publish to.
+
+Paid code-signing certificates (Windows Authenticode, Apple Developer ID)
+require a purchase and real business/identity verification — both outside
+what this project can do unilaterally. Asked the project owner directly how
+to handle this (2026-08-02); decided: ship real Windows/Linux binaries now
+with GPG signing + SHA256 checksums (free, immediate, and the same scheme
+Bitcoin Core itself uses for its own releases), and revisit paid
+certificates later if the owner decides to buy one. See §10.1.
+
+### 10.1 Windows/Linux builds, GPG release signing, and publishing (2026-08-02)
+
+Retried §9 item 9 after Docker became available in this environment (it
+wasn't, or wasn't working, during the original Phase 3 attempt).
+
+**Windows** (mingw-w64, CLI only — Qt was deliberately skipped via
+`NO_QT=1` since the previous attempt's Qt-source-download blocker was
+never re-verified as fixed, and a working CLI build was the higher-value,
+lower-risk target to actually ship today):
+
+- Two real, previously-undetected portability bugs surfaced only once an
+  actual cross-compile was attempted (this project had only ever been
+  built on macOS before now):
+  1. ~50 headers use `uint16_t`/`uint32_t`/`uint64_t`/`int64_t` without
+     directly including `<cstdint>`, relying on it arriving transitively
+     through another standard header. macOS's libc++ happens to do that;
+     mingw-w64's libstdc++ does not. Fixed by adding the explicit include
+     to every affected header (commit `3715899`).
+  2. `libbitcoinconsensus`'s shared-library link failed with "multiple
+     definition of `__stack_chk_fail`" — mingw-w64's static `libssp.a` and
+     its DLL import lib both got pulled in simultaneously. Fixed by
+     configuring with `--disable-shared` (this project doesn't need the
+     standalone libbitcoinconsensus C API; a fully static Windows build is
+     also the standard approach for a distributable binary anyway).
+- Produces real `codexacoind.exe`, `codexacoin-cli.exe`, `codexacoin-tx.exe`,
+  `codexacoin-util.exe`, `codexacoin-wallet.exe` — confirmed as valid
+  PE32+ executables via `file`. **Not** runtime-tested on real Windows or
+  under Wine (Wine's own `brew install --cask wine-stable` failed: the
+  cask is deprecated and its download timed out) — verification here is
+  limited to successful cross-compilation, static linking, and PE format
+  validation, not an actual execution trace. A real Windows/Wine
+  smoke-test is still open work.
+
+**Linux** (native build inside an Ubuntu 22.04 Docker container, full
+Qt GUI): no cross-compiler needed for this leg — `apt install
+qtbase5-dev` etc. gives a native toolchain, unlike Windows' cross-compile
+path. Configured with `--with-gui=qt5`, built cleanly with zero source
+changes needed. **Live-verified**, not just compiled: ran the resulting
+`codexacoind` inside the container on regtest, called `createwallet` and
+`getnewaddress` over real RPC, got back a real address
+(`mu14D8PTNSEGSCT8MVgK9mymGJBHH3b9y2`). Dynamically linked against
+standard Ubuntu 22.04 packages (Qt5, libevent, libzmq, sqlite3,
+miniupnpc, libnatpmp) — documented in the package's own README with the
+`apt install` line needed on a bare system.
+
+**GPG release signing**: generated a real ed25519 GPG keypair
+(`releases@codexacoin.com`, fingerprint `2C77 0475 F75E 8947 5B0E C03B
+7037 CCBC C6DC 0A7A`, 2-year expiry) via `gpg --batch --generate-key`.
+Private key material lives at `~/.codexacoin-release-gpg` on this Mac,
+outside any git-tracked directory — deliberately not committed anywhere.
+Computed `SHA256SUMS` across all four release artifacts (macOS `.dmg`,
+Windows `.zip`, Linux `.tar.gz`, Android `.apk`) and produced a detached
+signature (`SHA256SUMS.asc`), verified locally with `gpg --verify` before
+publishing. This is the same release-signing pattern Bitcoin Core itself
+uses (`SHA256SUMS.asc` + a project GPG key) — it proves a download is
+byte-for-byte what the project published, but it does **not** suppress
+Windows SmartScreen or macOS Gatekeeper warnings, which only a paid,
+identity-verified certificate can do. The website's Wallets section now
+explains this distinction plainly rather than implying GPG signing =
+"no more warnings."
+
+**Published** to `codexacoin.com/downloads/`: `CodexaCoin-Core-win64.zip`,
+`CodexaCoin-Core-x86_64-linux-gnu.tar.gz`, `SHA256SUMS`, `SHA256SUMS.asc`,
+`codexacoin-release-key.asc` (public key), alongside the existing macOS
+`.dmg` and Android `.apk`. All four checksums re-verified against the live
+server after upload (`shasum -a 256 -c SHA256SUMS` — all OK). Website
+updated with two new wallet cards (Windows, Linux) and a "Verifying a
+download" section with copy-pasteable `gpg`/`shasum` commands; the hero
+status banner and roadmap's stale "Windows/Linux desktop builds ... still
+to come" language corrected now that they're actually shipped.
 
 ---
 
@@ -1270,9 +1347,9 @@ across all seven phases:
 **External/administrative, not something further local work resolves:**
 - BIP44 coin type `3377` registration against the live SLIP-44 registry
   (§9 item 4).
-- Real DNS seed hostnames and dedicated BIP32 xpub/xprv version bytes
-  (§9 items 5-6) — infrastructure/branding decisions, not technical
-  blockers.
+- Real DNS seed hostnames (§9 item 6) — needs DNS registrar/zone access
+  for codexacoin.com, which isn't available here; an infrastructure
+  decision, not a technical blocker.
 - A dev fund address decision (§9 item 8) — currently disabled
   (`vDevFundAddress` empty on every network), a deliberate choice, not
   an oversight, pending an explicit decision to enable it.

@@ -34,7 +34,7 @@
     <img src="/assets/logo-512.png" alt="CodexaCoin logo" class="hero-logo" />
     <h1>CodexaCoin</h1>
     <p class="hero-tag">A modern Proof-of-Stake cryptocurrency —<br class="br-mobile" /> mined transparently, verified rigorously.</p>
-    <p class="hero-status">✅ The founder premine window is complete and checkpointed — the chain is live and staking on mainnet right now. Wallets are available below. Still open before a formal public launch: DNS seeds, BIP44 registration, and Windows/Linux desktop builds — see the roadmap.</p>
+    <p class="hero-status">✅ The founder premine window is complete and checkpointed — the chain is live and staking on mainnet right now. Wallets for macOS, Windows, Linux, Android, and web are all available below. Still open before a formal public launch: real DNS seeds and BIP44 registration — see the roadmap.</p>
   </section>
 
   <section id="wallets" class="section wrap">
@@ -65,11 +65,51 @@
         <a class="btn" href="/wallet/">Open web wallet</a>
         <p class="wallet-note">Custodial: the staking pool holds keys for pooled staking. See the wallet's own docs for what that means.</p>
       </div>
+      <div class="wallet-card">
+        <h3>Desktop (Windows)</h3>
+        <p>Full node + wallet, command-line only for now (no graphical window yet).</p>
+        <a class="btn" href="/downloads/CodexaCoin-Core-win64.zip">Download .zip</a>
+        <p class="wallet-note">Unsigned — no paid code-signing certificate yet, so Windows SmartScreen will warn on first run. Verify the download with GPG/SHA256 below instead; see the verification section for why that's the honest alternative to "no warning at all."</p>
+      </div>
+      <div class="wallet-card">
+        <h3>Desktop (Linux)</h3>
+        <p>Full node + graphical wallet, built and tested on Ubuntu 22.04 x86_64.</p>
+        <a class="btn" href="/downloads/CodexaCoin-Core-x86_64-linux-gnu.tar.gz">Download .tar.gz</a>
+        <p class="wallet-note">Needs Qt5 + standard libs from your distro's package manager — see the README inside the archive. No OS-level "unverified publisher" warning on Linux; verify with GPG/SHA256 below anyway.</p>
+      </div>
     </div>
     <p class="specs-note">
-      iOS and Windows/Linux desktop builds aren't available yet — see the
-      roadmap below.
+      iOS builds aren't available yet — see the roadmap below.
     </p>
+
+    <div class="prose" id="verify-downloads" style="margin-top:32px">
+      <h3>Verifying a download</h3>
+      <p>
+        None of these binaries carry a paid code-signing certificate (Windows
+        Authenticode, Apple notarization) — that costs money and requires
+        real business/identity verification we haven't done yet, so your OS
+        may warn you regardless of which of these you download. What you
+        <em>can</em> verify: that the file you downloaded is exactly what
+        this project published, using the same checksum + GPG signature
+        scheme Bitcoin Core itself uses for releases.
+      </p>
+      <p>
+        <a href="/downloads/SHA256SUMS">SHA256SUMS</a> ·
+        <a href="/downloads/SHA256SUMS.asc">SHA256SUMS.asc</a> (detached GPG signature) ·
+        <a href="/downloads/codexacoin-release-key.asc">public key</a>
+        (fingerprint <code>2C77 0475 F75E 8947 5B0E&nbsp;C03B 7037 CCBC C6DC 0A7A</code>)
+      </p>
+      <pre class="mono" style="white-space:pre-wrap">gpg --import codexacoin-release-key.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS/Linux
+# or: certutil -hashfile CodexaCoin-Core-win64.zip SHA256   # Windows</pre>
+      <p class="wallet-note">
+        If both checks pass, the file is byte-for-byte what the project
+        published. That doesn't make Windows/Gatekeeper stop warning you —
+        only a paid certificate does that — but it's the real, cryptographic
+        answer to "how do I know this hasn't been tampered with."
+      </p>
+    </div>
   </section>
 
   <section id="about" class="section wrap">
@@ -119,14 +159,14 @@
     <ol class="roadmap">
       <li class="done"><span class="rm-num">1</span><div><h3>Fork, rebrand &amp; reconfigure</h3><p>Consensus parameters, genesis, full rebrand from the upstream fork.</p></div></li>
       <li class="done"><span class="rm-num">2</span><div><h3>Testnet &amp; regtest validation</h3><p>Multi-node staking, premine, and PoW-rejection verified end-to-end.</p></div></li>
-      <li class="done"><span class="rm-num">3</span><div><h3>Desktop wallets</h3><p>Qt wallet with staking controls; macOS build verified, Linux/Windows CI configured.</p></div></li>
+      <li class="done"><span class="rm-num">3</span><div><h3>Desktop wallets</h3><p>Qt wallet with staking controls; macOS and Linux builds verified with a graphical window, Windows built and verified (CLI only for now).</p></div></li>
       <li class="done"><span class="rm-num">4</span><div><h3>Light-wallet backend</h3><p>Electrum-protocol server and mobile API gateway spec.</p></div></li>
       <li class="done"><span class="rm-num">5</span><div><h3>Mobile wallets</h3><p>Send/receive, staking status, verified on Android.</p></div></li>
       <li class="done"><span class="rm-num">6</span><div><h3>Staking service &amp; web wallet</h3><p>Custodial staking pool and browser-based wallet, verified against a real node.</p></div></li>
       <li class="done"><span class="rm-num">7</span><div><h3>Explorer &amp; launch readiness</h3><p>Public block explorer, multisig support, merchant checkout widget, this site.</p></div></li>
       <li class="done"><span class="rm-num">8</span><div><h3>Founder premine mining</h3><p>Complete — all 500 blocks mined, audited exact, and checkpointed. The chain has been staking (Proof-of-Stake) ever since.</p></div></li>
-      <li class="done"><span class="rm-num">9</span><div><h3>Wallets live</h3><p>Desktop (macOS), Android, and web wallet all available now — see above.</p></div></li>
-      <li class="upcoming"><span class="rm-num">→</span><div><h3>Formal public launch</h3><p>Real DNS seed hostnames, BIP44 coin-type registration, and Windows/Linux desktop builds still to come.</p></div></li>
+      <li class="done"><span class="rm-num">9</span><div><h3>Wallets live</h3><p>Desktop (macOS, Windows, Linux), Android, and web wallet all available now — see above.</p></div></li>
+      <li class="upcoming"><span class="rm-num">→</span><div><h3>Formal public launch</h3><p>Real DNS seed hostnames and BIP44 coin-type registration still to come, plus a graphical Windows wallet and paid code-signing certificates to remove the OS security warnings.</p></div></li>
     </ol>
   </section>
 
