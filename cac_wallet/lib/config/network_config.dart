@@ -27,8 +27,10 @@ class NetworkConfig {
   /// testnet, matching convention (every coin's testnet uses coin_type=1).
   final int bip44CoinType;
 
-  /// Gateway API base URL (see ../../docs/mobile-api.md). Placeholder --
-  /// no real gateway/infra exists yet (Phase 4 was a specification only).
+  /// Gateway API base URL (see ../../docs/mobile-api.md). Mainnet points
+  /// at the real deployed vps-gateway service behind codexacoin.com --
+  /// the same backend the web wallet talks to. Testnet has no deployed
+  /// gateway yet, so it stays a placeholder.
   final String gatewayBaseUrl;
 
   const NetworkConfig._({
@@ -50,7 +52,7 @@ class NetworkConfig {
     wifVersion: 0x9c, // 156
     bech32Hrp: 'cac',
     bip44CoinType: 3377,
-    gatewayBaseUrl: 'https://api.codexacoin.example/v1',
+    gatewayBaseUrl: 'https://codexacoin.com/v1',
   );
 
   static const testnet = NetworkConfig._(

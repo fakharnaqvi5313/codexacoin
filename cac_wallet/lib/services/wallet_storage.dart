@@ -13,6 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class WalletStorage {
   static const _mnemonicKey = 'cac_wallet_mnemonic_v1';
   static const _activeNetworkKey = 'cac_wallet_active_network_v1';
+  static const _stakeTokenKey = 'cac_wallet_stake_token_v1';
 
   static const _storage = FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -41,6 +42,7 @@ class WalletStorage {
   /// elsewhere by the user themselves.
   Future<void> wipeWallet() async {
     await _storage.delete(key: _mnemonicKey);
+    await _storage.delete(key: _stakeTokenKey);
   }
 
   Future<void> saveActiveNetwork(String networkName) async {
@@ -48,4 +50,18 @@ class WalletStorage {
   }
 
   Future<String?> readActiveNetwork() => _storage.read(key: _activeNetworkKey);
+
+  /// The staking-service auth token (see gateway_api.dart's login/signup).
+  /// Distinct from the wallet's own on-chain keys -- this is a bearer
+  /// token for the custodial gateway account, not derived from the
+  /// mnemonic and not usable to move on-chain funds by itself.
+  Future<void> saveStakeToken(String token) async {
+    await _storage.write(key: _stakeTokenKey, value: token);
+  }
+
+  Future<String?> readStakeToken() => _storage.read(key: _stakeTokenKey);
+
+  Future<void> clearStakeToken() async {
+    await _storage.delete(key: _stakeTokenKey);
+  }
 }

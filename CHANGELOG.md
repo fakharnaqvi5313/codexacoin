@@ -856,6 +856,36 @@ above.
 
 ---
 
+## Android: real gateway, working staking login/deposit/withdraw, and a launch-blocking crash fix
+
+### 2026-08-03
+
+- The Android app's gateway URL was still a placeholder (`api.codexacoin.
+  example`) and its staking screen was fully stubbed despite the gateway
+  endpoints existing since Phase 6 -- deposit/withdraw buttons just showed
+  a "not live yet" snackbar, and the auth token was silently never sent
+  with staking requests. Fixed: mainnet now points at the real
+  `codexacoin.com/v1` backend (same one the web wallet uses), added
+  login/signup mirroring web-wallet's exact contract (including the
+  self-attested KYC fields), and rebuilt the staking screen with a real
+  auth form and working deposit/withdraw.
+- Found and fixed a real, previously-unknown bug along the way:
+  `MainActivity` wasn't a `FragmentActivity`, which the biometric
+  app-lock plugin requires -- every fresh install hit
+  `no_fragment_activity` and was **permanently stuck on the lock screen**,
+  unable to reach any other screen. Not related to this session's other
+  changes; just never triggered before because nobody had run the app
+  past onboarding with a real emulator/device credential enrolled.
+- Verified on a real Android emulator: confirmed the crash is gone,
+  created a real wallet through onboarding, and reached the rebuilt
+  staking screen. Full deposit/withdraw click-through wasn't finished --
+  the emulator became unstable partway through (unrelated to the code
+  changes) -- documented honestly rather than claimed as done.
+- See `PARAMETERS.md` section 12.6 for the full writeup, closing section
+  12.5 item 2.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

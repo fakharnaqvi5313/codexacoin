@@ -979,6 +979,70 @@ phase rather than left running silently or claimed as done.
    check in isolation (without concurrent mining/build load) to get a
    clean visual confirmation of the mnemonic-display step.
 
+### 12.6 Wired the Android app to the real gateway and fixed staking (2026-08-03)
+
+Item 2 above, closed: the Android app previously pointed at a placeholder
+gateway domain (`api.codexacoin.example`) that was never going to resolve,
+and its staking screen was fully stubbed (`stakingStatus`'s auth token
+parameter was accepted and silently discarded; deposit/withdraw buttons
+just showed a "not live yet" snackbar even though the gateway endpoints
+had existed since Phase 6). Fixed:
+
+- `lib/config/network_config.dart`: mainnet `gatewayBaseUrl` now points at
+  `https://codexacoin.com/v1`, the same live backend the web wallet uses
+  (testnet stays a placeholder — no testnet gateway is deployed).
+- `lib/services/gateway_api.dart`: added `login`/`signup` (mirroring
+  `web-wallet/gateway.js`'s exact request shape, including the
+  self-attested KYC fields), and fixed `stakingStatus`/`stakingDeposit`/
+  `stakingWithdraw` to actually send `Authorization: Bearer <token>` —
+  they previously never attached the token to the request at all.
+- `lib/services/wallet_service.dart` / `wallet_storage.dart`: added
+  staking-account auth state (a bearer token, persisted via
+  `flutter_secure_storage` separately from the wallet's own mnemonic —
+  it's a custodial-pool account credential, not an on-chain key).
+- `lib/screens/staking_screen.dart`: rewritten with a real login/signup
+  form (mirroring the web wallet's fields and flow, including the
+  self-attested-not-verified KYC copy) and working deposit/withdraw
+  cards, replacing the "not live yet" stub. Auto-logs out and returns to
+  the login form on a 401, matching web-wallet's behavior.
+
+**A real, previously-unknown crash bug found and fixed along the way**:
+`android/app/src/main/kotlin/.../MainActivity.kt` extended plain
+`FlutterActivity`, but `local_auth` (the biometric app-lock on
+`lock_screen.dart`, gating every screen past onboarding) requires a
+`FragmentActivity` host to show its prompt. On a fresh install this threw
+`PlatformException(no_fragment_activity, ...)` and the app was
+**permanently stuck on the lock screen with no way in** — a
+launch-blocking bug affecting 100% of real installs, not something
+specific to this session's changes. Fixed by switching to
+`FlutterFragmentActivity`.
+
+**Verification**: real, not just `flutter analyze` (though that's also
+clean). Built and ran the debug APK on a real Android emulator
+(Pixel Fold API 35): confirmed the `no_fragment_activity` crash is gone
+(topResumedActivity check + logcat, no more fatal exception), created a
+real wallet through onboarding (a genuine BIP39 mnemonic rendered and
+persisted), and — with `LockScreen` temporarily bypassed in a local,
+uncommitted edit purely to get past a *separate*, pre-existing emulator
+limitation (this fresh AVD has no enrolled screen-lock credential at all,
+so `local_auth` correctly refuses to proceed, which is the "hardware
+exists but nothing enrolled" gap the code's own comment already flags as
+a known follow-up) — reached the Staking screen and confirmed the new
+login/signup form renders. The emulator then became unstable
+independent of any app change (`adb` reported it `offline`, and after a
+restart `PackageManager` reported the freshly-installed `MainActivity`
+component as not existing despite `pm list packages` showing the app
+installed) and further on-device clicking through deposit/withdraw
+wasn't completed. The temporary `LockScreen` bypass was reverted before
+finishing (`git diff lib/main.dart` confirmed empty) and `flutter
+analyze` re-run clean afterward — nothing about that bypass shipped.
+
+Still open: actually submitting a signup/login/deposit/withdraw against
+the live gateway from the app (blocked on the emulator instability
+above, not on anything in the code); a fallback PIN for devices with no
+enrolled screen lock at all (the pre-existing gap `lock_screen.dart`
+already documents).
+
 ---
 
 ## 13. VPS gateway and custodial staking pool (Phase 6)

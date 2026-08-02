@@ -1,11 +1,7 @@
-/// HTTP client for the mobile API gateway specified in
-/// ../../docs/mobile-api.md. That gateway does not exist yet as a running
-/// service (Phase 4 was a specification only) -- every method here will
-/// fail with a network error against a real endpoint until Phase 5/6
-/// implements it. Kept as a single, narrow client class so swapping in
-/// the real gateway later is a one-file change, and so this is the only
-/// place in the app that does any networking beyond broadcasting a
-/// transaction.
+/// HTTP client for the vps-gateway service (../../vps-gateway/), matching
+/// ../../docs/mobile-api.md and mirroring web-wallet/gateway.js's contract
+/// exactly. Kept as a single, narrow client class so it's the only place
+/// in the app that does any networking beyond broadcasting a transaction.
 library;
 
 import 'dart:convert';
@@ -30,15 +26,18 @@ class GatewayApi {
 
   Uri _uri(String path) => Uri.parse('${network.gatewayBaseUrl}$path');
 
-  Future<Map<String, dynamic>> _get(String path) async {
-    final resp = await _client.get(_uri(path));
+  Map<String, String> _authHeaders(String? token) =>
+      token == null ? const {} : {'Authorization': 'Bearer $token'};
+
+  Future<Map<String, dynamic>> _get(String path, {String? auth}) async {
+    final resp = await _client.get(_uri(path), headers: _authHeaders(auth));
     return _decode(resp);
   }
 
-  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body, {String? auth}) async {
     final resp = await _client.post(
       _uri(path),
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ..._authHeaders(auth)},
       body: jsonEncode(body),
     );
     return _decode(resp);
@@ -81,19 +80,54 @@ class GatewayApi {
   Future<Map<String, dynamic>> feeEstimate({int targetBlocks = 6}) =>
       _get('/fee-estimate?target_blocks=$targetBlocks');
 
-  // -- §5 staking (Phase 6, no real backend yet -- calls will fail until
-  // that phase exists; UI must handle GatewayException gracefully, never
-  // crash on a missing staking backend) --
-  Future<Map<String, dynamic>> stakingStatus(String authToken) => _get('/staking/status');
+  // -- account auth (gateway account for the custodial staking service --
+  // separate from this wallet's own on-chain keys/mnemonic) --
+  Future<String> login(String email, String password) async {
+    final result = await _post('/auth/login', {'email': email, 'password': password});
+    return result['token'] as String;
+  }
 
-  Future<Map<String, dynamic>> stakingDeposit(int amountSatoshis) =>
-      _post('/staking/deposit', {'amount': amountSatoshis.toString()});
+  /// [dateOfBirth] must be `YYYY-MM-DD`. [idType] is `nic` or `passport`.
+  /// These KYC fields are self-attested, not identity-verified -- see
+  /// vps-gateway/kyc.py's module docstring.
+  Future<String> signup({
+    required String email,
+    required String password,
+    required String fullName,
+    required String dateOfBirth,
+    required String idType,
+    required String idNumber,
+    String? referralCode,
+  }) async {
+    final result = await _post('/auth/signup', {
+      'email': email,
+      'password': password,
+      'full_name': fullName,
+      'date_of_birth': dateOfBirth,
+      'id_type': idType,
+      'id_number': idNumber,
+      if (referralCode != null && referralCode.isNotEmpty) 'referral_code': referralCode,
+    });
+    return result['token'] as String;
+  }
 
-  Future<Map<String, dynamic>> stakingWithdraw(int amountSatoshis, String toAddress) =>
+  // -- §5 staking (custodial pool; requires an account auth token from
+  // login/signup above) --
+  Future<Map<String, dynamic>> stakingStatus(String authToken) =>
+      _get('/staking/status', auth: authToken);
+
+  Future<Map<String, dynamic>> stakingDeposit(String authToken, int amountSatoshis) =>
+      _post('/staking/deposit', {'amount': amountSatoshis.toString()}, auth: authToken);
+
+  Future<Map<String, dynamic>> stakingWithdraw(
+    String authToken,
+    int amountSatoshis,
+    String toAddress,
+  ) =>
       _post('/staking/withdraw', {
         'amount': amountSatoshis.toString(),
         'to_address': toAddress,
-      });
+      }, auth: authToken);
 
   void close() => _client.close();
 }

@@ -22,17 +22,80 @@ class WalletService extends ChangeNotifier {
 
   NetworkConfig network = NetworkConfig.mainnet;
   String? _mnemonic;
+  String? _stakeToken;
   bool loaded = false;
 
   bool get hasWallet => _mnemonic != null;
+
+  /// Logged in to the custodial staking service's gateway account. This is
+  /// entirely separate from [hasWallet]/the mnemonic -- it's an account on
+  /// the staking pool, not a property of the on-chain wallet itself.
+  bool get stakingLoggedIn => _stakeToken != null;
 
   Future<void> bootstrap() async {
     final storedNetwork = await _storage.readActiveNetwork();
     network = storedNetwork == 'testnet' ? NetworkConfig.testnet : NetworkConfig.mainnet;
     _gateway = GatewayApi(network);
     _mnemonic = await _storage.readMnemonic();
+    _stakeToken = await _storage.readStakeToken();
     loaded = true;
     notifyListeners();
+  }
+
+  Future<void> stakingLogin(String email, String password) async {
+    final token = await _gateway.login(email, password);
+    _stakeToken = token;
+    await _storage.saveStakeToken(token);
+    notifyListeners();
+  }
+
+  Future<void> stakingSignup({
+    required String email,
+    required String password,
+    required String fullName,
+    required String dateOfBirth,
+    required String idType,
+    required String idNumber,
+    String? referralCode,
+  }) async {
+    final token = await _gateway.signup(
+      email: email,
+      password: password,
+      fullName: fullName,
+      dateOfBirth: dateOfBirth,
+      idType: idType,
+      idNumber: idNumber,
+      referralCode: referralCode,
+    );
+    _stakeToken = token;
+    await _storage.saveStakeToken(token);
+    notifyListeners();
+  }
+
+  /// Signs out of the staking service's gateway account only -- does not
+  /// touch the on-chain wallet/mnemonic.
+  Future<void> stakingLogout() async {
+    _stakeToken = null;
+    await _storage.clearStakeToken();
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> fetchStakingStatus() {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.stakingStatus(token);
+  }
+
+  Future<Map<String, dynamic>> stakingDeposit(int amountSatoshis) {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.stakingDeposit(token, amountSatoshis);
+  }
+
+  Future<Map<String, dynamic>> stakingWithdraw(int amountSatoshis, String toAddress) {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.stakingWithdraw(token, amountSatoshis, toAddress);
   }
 
   Future<String> createNewWallet() async {
@@ -133,6 +196,7 @@ class WalletService extends ChangeNotifier {
   Future<void> wipeWallet() async {
     await _storage.wipeWallet();
     _mnemonic = null;
+    _stakeToken = null;
     notifyListeners();
   }
 }
