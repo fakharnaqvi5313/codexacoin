@@ -942,6 +942,33 @@ above.
 
 ---
 
+## First public GitHub repo, first real CI release, v0.1.0 draft published
+
+### 2026-08-03
+
+- Published the project to GitHub for the first time
+  (`github.com/fakharnaqvi5313/codexacoin`, public, MIT) -- scanned
+  tracked file contents for real secrets first (none found).
+- Moved `release.yml` to the actual monorepo root (GitHub Actions never
+  discovers workflows nested a directory down) and pushed tag `v0.1.0`.
+  `linux-x86_64` and `windows-x86_64` built successfully on GitHub's own
+  infrastructure for the first time ever. `macos-x86_64` got stuck queued
+  76-90+ minutes on two separate attempts with no error and nothing else
+  competing for a runner anywhere in the account -- un-gated
+  `publish-release` from needing macOS so future releases aren't held
+  hostage by that queue.
+- Published a draft GitHub Release for `v0.1.0` with all four platform
+  artifacts: the CI-built Linux tarball/`.deb` and Windows installer
+  (downloaded directly rather than waiting on a full re-run), plus a
+  freshly rebuilt-and-smoke-tested macOS `.dmg`.
+- Added the three CI-built artifacts to the website's downloads page too,
+  alongside the existing locally-built ones, framed as a second
+  independently-built option rather than a replacement. Regenerated and
+  re-signed `SHA256SUMS` to cover all seven hosted files.
+- See `PARAMETERS.md` section 16.7 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

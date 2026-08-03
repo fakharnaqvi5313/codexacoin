@@ -1653,6 +1653,54 @@ multi-column section (trust strip, "why" cards, wallet cards, ecosystem
 cards) actually laid out into clean columns rather than silently
 collapsing.
 
+### 16.7 First real GitHub Actions release, and a v0.1.0 draft release (2026-08-03)
+
+Published the project to GitHub for the first time
+(`github.com/fakharnaqvi5313/codexacoin`, public, MIT), scanning tracked
+file contents first for anything that looked like a real secret (none
+found -- the actual JWT/KYC-encryption secrets and RPC passwords live only
+in the VPS's `/etc/*.conf`, never committed). `.github/workflows/release.yml`
+had to be moved from `codexacoin-core/.github/workflows/` to the monorepo
+root's `.github/workflows/` first -- GitHub Actions only discovers
+workflows under the actual repo root, so it would never have triggered
+from its original nested location. Every build step got a
+`working-directory: codexacoin-core` to compensate.
+
+Pushed tag `v0.1.0` to trigger it for real. `linux-x86_64` and
+`windows-x86_64` both built successfully on GitHub's own infrastructure --
+the first CodexaCoin artifacts ever built outside this project's own dev
+machine. `macos-x86_64` got stuck `queued` for 76+ minutes with no error,
+confirmed via `gh run cancel` + `gh run rerun --job` (a clean way to
+re-queue a single job without discarding the other two jobs' completed
+results) that it wasn't a fluke -- the second attempt got stuck again,
+86+ minutes, with nothing else competing for a runner anywhere in the
+account (checked across every repo), no billing restriction, and GitHub's
+own status page showing all systems operational. Un-gated
+`publish-release` from `needs: [linux, windows, macos]` down to
+`needs: [linux, windows]` so future tag pushes aren't held hostage by
+that queue; `macos-x86_64` still builds, just doesn't block the release.
+
+Published a draft GitHub Release (`v0.1.0`) by downloading the
+already-succeeded linux/windows artifacts directly (`gh run download`)
+rather than waiting on a full workflow re-run, and separately rebuilt the
+macOS `.dmg` locally (same proven native-build path from earlier this
+session, now incorporating the day's `<cstdint>`/BIP32 fixes) --
+smoke-tested by mounting the fresh dmg and running
+`CodexaCoin-Qt -version` before treating it as a real artifact, not just
+trusting a successful build. All four platform artifacts (Linux
+tarball+`.deb`, Windows NSIS installer, macOS `.dmg`) are attached to the
+draft release.
+
+The website's downloads page now also links the three CI-built artifacts
+(Windows installer, Linux tarball, Linux `.deb`) as a second, independently-
+built option alongside the locally-built ones already there, framed
+honestly as an additional trust signal (built on neutral infrastructure,
+not a developer's own machine) rather than a replacement -- the CI Linux
+build is CLI-only (no Qt packages installed on that runner), so it's a
+genuinely different, not strictly better, artifact than the GUI-inclusive
+one already hosted. `SHA256SUMS`/`SHA256SUMS.asc` regenerated and
+re-verified against the live server to cover all seven files now hosted.
+
 ## 17. Deferred: governance and hardware wallet support
 
 Two further ideas came up in the same "what else should we add?" pass
