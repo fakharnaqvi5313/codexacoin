@@ -998,6 +998,33 @@ above.
 
 ---
 
+## First real Windows GUI wallet build
+
+### 2026-08-03
+
+- Achieved a genuine Windows GUI build (`codexacoin-qt.exe` bundled in the
+  installer) for the first time, after the local macOS-hosted mingw Qt
+  cross-compile hit a real, structural dead end (the host-tool build
+  feeds macOS Clang flags to the mingw compiler, which rejects them --
+  not fixable, just an unsupported combination).
+- Fixed the real bug instead: GitHub Actions' `release.yml` Windows job
+  never used `CONFIG_SITE` when calling `configure`, so it never found
+  the Qt that `depends` already builds by default -- confirmed by reading
+  `depends/config.site.in` directly. That's why the CI-built Windows
+  artifact from the last release was CLI-only despite never disabling
+  Qt. Fixed, then verified for real: extracted the resulting installer
+  with `p7zip` (a `strings` search alone was misleading -- NSIS
+  compresses its payload, so it looked empty even when genuinely not) and
+  confirmed `codexacoin-qt.exe` (39.3MB) is really in there.
+- Replaced the stale CLI-only Windows download on both the GitHub Release
+  and the website with this real GUI build, and corrected the homepage
+  copy that said Windows was "command-line only for now."
+- Still blocked, same as before: real Microsoft Store submission needs
+  the account owner to convert to a Company developer account.
+- See `PARAMETERS.md` section 16.9 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

@@ -1750,6 +1750,75 @@ mid-transfer (found a leftover `.temp` file confirming this), which is
 worth retrying now that network conditions have been reliable for
 everything else built today.
 
+### 16.9 Windows GUI wallet, achieved via CI rather than locally (2026-08-03)
+
+Continuing 16.8's Windows GUI build attempt: the depends Qt fetch failed
+twice more even after clearing the stale `.temp` file, this time against
+a *different* mirror (`mirrors.sau.edu.cn`, auto-selected by
+download.qt.io's MirrorBrain geo-redirect) -- a connection reset, then a
+404, then (worse) a silently truncated download that passed as "complete"
+but failed sha256 verification (confirmed genuinely truncated via
+`xz -t`, not tampered -- checked the file size and hash Qt's own download
+page lists to be sure the *expected* hash was legitimate before assuming
+otherwise). Fetched Qt's mirror list directly, manually downloaded all
+three required archives (qtbase, qttranslations, qttools) from
+`ftp.fau.de` instead, verified each against the hashes in
+`depends/packages/qt.mk`, and pre-seeded them into `depends/sources/` so
+the build could skip straight to compiling.
+
+That got further, but hit a different, more fundamental problem:
+`x86_64-w64-mingw32-g++` rejected several macOS-Clang-specific flags
+(`-stdlib=libc++`, `-mmacosx-version-min=10.13`, `-fconstant-cfstrings`)
+while building qmake's native host tool. This is a real, structural gap,
+not a fixable environment quirk: cross-compiling Qt for Windows *from
+macOS* isn't a combination the depends system's Qt package script
+handles correctly -- the host-tool build picks up macOS-native compiler
+flags regardless of the target. Abandoned that path entirely rather than
+patching around it.
+
+The better fix: this project's own GitHub Actions `release.yml` already
+cross-compiles Windows from an `ubuntu-22.04` runner -- Linux-hosted
+mingw cross-compilation is the standard, well-supported path (it's how
+upstream Bitcoin Core builds its own Windows GUI releases). Investigated
+why that CI job's Windows artifact had been CLI-only despite never
+setting `NO_QT=1`: its `configure` step passed `--prefix=...` manually
+instead of using `CONFIG_SITE`, so it never located the qmake/moc/uic
+tools depends builds for the cross target -- confirmed by reading
+`depends/config.site.in` directly (`with_qt_bindir` is only set when
+`CONFIG_SITE` is used at all). Fixed the workflow to use `CONFIG_SITE`
+properly, matching the pattern already used throughout this session's own
+local builds.
+
+Triggered a `workflow_dispatch` test run rather than waiting for a new
+tag. `configure` reported `with gui / qt = yes` this time, and the log
+showed `codexacoin-qt.exe` genuinely compiled and linked. Downloaded the
+artifact and ran a `strings` search for Qt DLL names first -- found
+nothing, which looked like a failure, but turned out to be a flawed check:
+NSIS installers LZMA-compress their payload, so bundled filenames don't
+appear as plain text even when genuinely present. Installed `p7zip` and
+extracted the installer for real: `codexacoin-qt.exe` (39.3MB
+uncompressed) is genuinely inside, alongside all five CLI tools --
+70.8MB of real content compressed down to the ~32.7MB installer, which
+is why the compressed size alone looked deceptively similar to the old
+CLI-only build and shouldn't have been trusted as a verification method
+on its own.
+
+Published the result: replaced the stale local CLI-only
+`CodexaCoin-Core-win64.zip` on both the `v0.1.0` GitHub Release and the
+website's downloads page with this real GUI installer (same filename,
+`codexacoin-26.2.0-win64-setup.exe`, previously used for what was
+actually still a CLI-only CI artifact before this fix). Updated the
+homepage's Windows wallet card copy, which had said "command-line only
+for now (no graphical window yet)" -- no longer true. Regenerated and
+re-signed `SHA256SUMS` to match. This is the first genuine Windows GUI
+build this project has ever produced, matching what macOS and Linux
+already had.
+
+Still blocked, unchanged from 16.8: actual Microsoft Store submission
+needs the account owner to convert their Individual developer account to
+a Company account with Microsoft, which is real business verification
+only they can do. This build is ready and waiting for that.
+
 ## 17. Deferred: governance and hardware wallet support
 
 Two further ideas came up in the same "what else should we add?" pass

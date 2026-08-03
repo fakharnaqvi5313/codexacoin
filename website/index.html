@@ -116,8 +116,8 @@
       <div class="wallet-card">
         <div class="wallet-icon">🪟</div>
         <h3>Desktop (Windows)</h3>
-        <p>Full node + wallet, command-line only for now (no graphical window yet).</p>
-        <a class="btn" href="/downloads/CodexaCoin-Core-win64.zip">Download .zip</a>
+        <p>Full node + graphical wallet, built and tested via GitHub Actions CI.</p>
+        <a class="btn" href="/downloads/codexacoin-26.2.0-win64-setup.exe">Download installer (.exe)</a>
         <p class="wallet-note">Unsigned — no paid code-signing certificate yet, so Windows SmartScreen will warn on first run. Verify with GPG/SHA256 below instead.</p>
       </div>
       <div class="wallet-card">
@@ -164,14 +164,15 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS/Linux
     <div class="prose" style="margin-top:32px">
       <h3>Also built independently on GitHub Actions</h3>
       <p>
-        The downloads above are built locally by the project. These are the
-        same release built from the same tagged source, but compiled fresh
-        on GitHub's own infrastructure rather than a developer's machine —
-        a second, independent build path worth having for a project asking
-        to be trusted. All covered by the same <code>SHA256SUMS</code> above.
+        The Windows installer above and the macOS <code>.dmg</code> are both
+        already built via GitHub's own infrastructure or verified against it
+        — a second, independent build path worth having for a project asking
+        to be trusted, not just a developer's own machine. The Linux archive
+        below is a CLI-only alternative build (no Qt packages on that CI
+        runner) alongside the GUI-inclusive one above. All covered by the
+        same <code>SHA256SUMS</code> above.
       </p>
       <p>
-        <a href="/downloads/codexacoin-26.2.0-win64-setup.exe">Windows installer (.exe)</a> ·
         <a href="/downloads/codexacoin-0.1.0-x86_64-linux-gnu.tar.gz">Linux (.tar.gz, CLI-only)</a> ·
         <a href="/downloads/codexacoin_0.1.0_amd64.deb">Linux .deb package (Debian/Ubuntu)</a> ·
         <a href="https://github.com/fakharnaqvi5313/codexacoin/releases/tag/v0.1.0" target="_blank" rel="noopener">full CI release on GitHub →</a>
