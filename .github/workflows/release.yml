@@ -133,7 +133,8 @@ jobs:
       - name: Build CodexaCoin
         run: |
           ./autogen.sh
-          ./configure --prefix="$PWD/depends/x86_64-w64-mingw32" --enable-sse2 \
+          CONFIG_SITE="$PWD/depends/x86_64-w64-mingw32/share/config.site" \
+            ./configure --prefix=/ --enable-sse2 \
             LDFLAGS=-static-libgcc --enable-reduce-exports || ( cat config.log && false )
           make -j "$MAKEJOBS" deploy
 
