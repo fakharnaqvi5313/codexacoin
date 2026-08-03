@@ -1025,6 +1025,32 @@ above.
 
 ---
 
+## DEX listing: chose Stellar, set up (unfunded) issuer infrastructure
+
+### 2026-08-03
+
+- Researched all three requested options (THORChain, Osmosis, Stellar
+  DEX) plus XRPL as a close alternative before choosing. THORChain and
+  Osmosis are both structurally blocked for a chain like CAC (no smart
+  contracts, no IBC) regardless of budget -- THORChain requires its own
+  node operators to adopt a new chain-client integration; Osmosis
+  requires a purpose-built bridge, the kind of "another blockchain"
+  representation explicitly asked to avoid if possible. Stellar's native
+  DEX is genuinely near-zero-cost and permissionless, and has meaningfully
+  more liquidity than XRPL's equivalent.
+- Set up `stellar-issuer/`: generated the two Stellar keypairs (issuer +
+  distributor) needed to issue a `CAC` asset, with secret seeds written
+  only to a local gitignored file, never logged or committed; created a
+  new, empty CAC-chain wallet (`stellar-reserve`) to eventually hold the
+  backing reserve; wrote `setup_asset.py`, ready to run once funded.
+- Deliberately did not fund the accounts, decide a reserve amount, or
+  issue anything -- those are real financial commitments only the
+  project owner should make, same standing rule already applied to the
+  referral-pool funding decision.
+- See `PARAMETERS.md` section 18 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

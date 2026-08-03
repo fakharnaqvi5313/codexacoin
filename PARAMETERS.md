@@ -1859,3 +1859,90 @@ elsewhere in this document) breaks the hardware wallet's blind- or
 clear-signing assumptions. Neither path is a local software change;
 both need scoping with an actual device in hand before any code is
 written.
+
+---
+
+## 18. DEX listing (2026-08-03)
+
+Requested: list CAC on a DEX at minimum/zero cost, preferring not to
+wrap as an ERC-20 or represent CAC on another chain if avoidable.
+Researched all three named options (THORChain, Osmosis, Stellar DEX)
+plus XRPL as a close alternative to Stellar before choosing, rather than
+defaulting to whichever seemed easiest.
+
+**THORChain — not achievable at any price.** Adding a chain means writing
+a full Bifröst chain-client integration and getting ≥67% of THORChain's
+own bonded node operators (each taking on real slashing/loss risk per
+chain they run) to adopt it, after a formal proposal. Every chain added
+in the past two years (Solana, Monero, TRON, XRP) was already a large,
+liquid, exchange-listed asset — THORChain has never onboarded an obscure
+new L1, and there's no fee or self-service path. This is gated by
+THORChain's own governance and node-operator risk tolerance, not
+something an outside project can unlock with money or effort alone.
+
+**Osmosis — also blocked, same root cause.** Osmosis only lists
+IBC-native or bridged assets. CAC has no smart contracts and no IBC
+support, so any Osmosis listing would require a purpose-built bridge —
+even Bitcoin only reached Osmosis via Nomic, a dedicated bridge project
+that took real engineering and a DAO vote. Bridge providers gatekeep by
+their own priorities, not a price list.
+
+**XRPL — a real, close alternative to Stellar, considered and set
+aside.** XRPL has the same core mechanism as Stellar (protocol-native
+DEX, issued-currency/trustline tokens, near-zero cost — ~1.2 XRP in
+locked reserves, sub-cent fees) plus a native on-ledger AMM (XLS-30,
+live since 2024, no smart contract needed). Genuinely permissionless,
+genuinely cheap. Set aside in favor of Stellar because its DEX+AMM
+ecosystem liquidity has stayed flat around $27M TVL since 2024, versus
+Stellar's ~$69M and growing fast (+451% YoY on its main AMM, Aquarius),
+plus Stellar carries meaningfully more stablecoin presence (PayPal's
+PYUSD, MoneyGram's MGUSD) — more real counterparty liquidity for a
+brand-new, obscure asset. Worth revisiting if Stellar liquidity doesn't
+materialize for CAC specifically.
+
+**Stellar DEX — chosen.** Genuinely near-zero-cost (~1.5 XLM in locked
+reserves, sub-cent fees) and fully permissionless at the base protocol
+level — no approval process for issuing a new asset or trading it on
+the built-in DEX/AMM. The unavoidable honesty point, stated plainly
+rather than glossed over: since CAC has no native bridge to Stellar (no
+trustless bridge exists for an arbitrary new UTXO chain), this can only
+ever be an **IOU** — a Stellar-issued credit asset backed by real CAC
+held in reserve, not a bridge of the actual chain. That makes this a new
+custodial liability, the same kind of thing already disclosed for the
+VPS gateway's staking pool (§13.7), and it needs the same treatment:
+published reserve backing, plain risk disclosure, no overstating what it
+actually is.
+
+### 18.1 Infrastructure set up (not yet live)
+
+Created `stellar-issuer/` with:
+
+- Two new Stellar keypairs (issuer + distributor, the standard two-account
+  pattern — keeping supply-issuance authority separate from day-to-day
+  trading operations). Secret seeds written only to a local, chmod-600,
+  gitignored file, never printed to any log or committed anywhere; only
+  the public keys are documented. Neither account exists on the Stellar
+  network yet — an account only comes into existence once it receives
+  its first real XLM payment.
+- A new CAC-chain wallet on the live mainnet node (`stellar-reserve`,
+  address `CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS`) to eventually hold
+  whatever amount of real CAC gets locked as the Stellar asset's
+  backing reserve. Empty — nothing sent to it.
+- `setup_asset.py`, ready to run once both Stellar accounts are funded
+  and the reserve amount is decided (deliberately requires that amount
+  to be set explicitly, refuses to run with a guessed default).
+
+**Deliberately not done, because these are the project owner's calls to
+make, not something to invent or execute unilaterally (matches this
+project's standing rule on financial actions — see the referral-funding
+decision in §13.7 for the same pattern):**
+
+- Funding the two Stellar accounts with real XLM (a real transfer of
+  value).
+- Deciding how much real CAC to lock as the reserve, and therefore how
+  much of the Stellar `CAC` asset gets issued.
+- Actually running `setup_asset.py`, creating an AMM pool or DEX orders,
+  or moving anything to/from the `stellar-reserve` wallet.
+- Locking the issuer account's master key weight to 0 (the standard way
+  to cap further issuance) — needs to happen only after the reserve
+  amount is truly final.
