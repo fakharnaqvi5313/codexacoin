@@ -1051,6 +1051,41 @@ above.
 
 ---
 
+## DEX listing goes live: reserve funded, CAC issued on Stellar, initial offer placed
+
+### 2026-08-03
+
+- Project owner funded both Stellar accounts (issuer and distributor)
+  with real XLM, and locked the reserve by sending 10,000,000 real CAC to
+  the `stellar-reserve` wallet on the live mainnet node (confirmed
+  on-chain, single UTXO, height 1004).
+- Ran `setup_asset.py`: distributor established a trustline to the `CAC`
+  asset and the issuer sent it the full 10,000,000 reserve-backed amount
+  -- verified live via Horizon.
+- Ran `place_sell_offer.py`: placed a resting DEX sell offer of 500,000
+  CAC against XLM at the owner-chosen initial rate of 1 XLM = 14 CAC
+  (price 1/14) -- verified live on Stellar's DEX as offer `1851427700`.
+- Published `website/legal/proof-of-reserve.html`: fetches the real
+  `stellar-reserve` CAC balance and the issued Stellar `CAC` supply live,
+  client-side, from the CAC explorer API and Horizon respectively, and
+  compares them -- so "backed 1:1" is independently checkable rather than
+  a bare claim. Linked from the site footer and every legal page's nav.
+- Added section 10 to `risk-disclosure.html` (`id="stellar-iou"`)
+  disclosing the Stellar `CAC` asset's custodial/IOU nature, matching how
+  the VPS gateway's custodial staking pool is disclosed in section 5 of
+  the same page.
+- As with every step in this sequence, all real transactions (funding,
+  the CAC reserve transfer, issuing the asset, placing the DEX offer)
+  were executed by the project owner directly, never by the assistant --
+  each was independently verified afterward via read-only Horizon/CAC
+  explorer API calls.
+- Still open: locking the issuer account's master key weight to 0 (or
+  multisig) to permanently cap further issuance, left for the project
+  owner once the reserve amount is treated as final. See `PARAMETERS.md`
+  section 18.1 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

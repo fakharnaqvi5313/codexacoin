@@ -1913,36 +1913,51 @@ VPS gateway's staking pool (§13.7), and it needs the same treatment:
 published reserve backing, plain risk disclosure, no overstating what it
 actually is.
 
-### 18.1 Infrastructure set up (not yet live)
+### 18.1 Infrastructure set up, then taken live (2026-08-03)
 
-Created `stellar-issuer/` with:
+Created `stellar-issuer/` with two new Stellar keypairs (issuer +
+distributor, the standard two-account pattern — keeping supply-issuance
+authority separate from day-to-day trading operations) and a new
+CAC-chain wallet on the live mainnet node (`stellar-reserve`, address
+`CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS`) to hold the real CAC backing the
+Stellar asset. Secret seeds for the Stellar keypairs written only to a
+local, chmod-600, gitignored file, never printed to any log or committed
+anywhere; only the public keys are documented anywhere.
 
-- Two new Stellar keypairs (issuer + distributor, the standard two-account
-  pattern — keeping supply-issuance authority separate from day-to-day
-  trading operations). Secret seeds written only to a local, chmod-600,
-  gitignored file, never printed to any log or committed anywhere; only
-  the public keys are documented. Neither account exists on the Stellar
-  network yet — an account only comes into existence once it receives
-  its first real XLM payment.
-- A new CAC-chain wallet on the live mainnet node (`stellar-reserve`,
-  address `CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS`) to eventually hold
-  whatever amount of real CAC gets locked as the Stellar asset's
-  backing reserve. Empty — nothing sent to it.
-- `setup_asset.py`, ready to run once both Stellar accounts are funded
-  and the reserve amount is decided (deliberately requires that amount
-  to be set explicitly, refuses to run with a guessed default).
+Every step below that moves real value was executed by the project
+owner, not by the assistant — matches this project's standing rule on
+financial actions (see the referral-funding decision in §13.7 for the
+same pattern). The assistant's role throughout was preparing scripts,
+computing amounts/prices, and verifying each result via read-only
+Horizon/explorer API calls afterward:
 
-**Deliberately not done, because these are the project owner's calls to
-make, not something to invent or execute unilaterally (matches this
-project's standing rule on financial actions — see the referral-funding
-decision in §13.7 for the same pattern):**
+1. **Funded** both Stellar accounts with real XLM (issuer
+   `GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y`, distributor
+   `GA3VI7RXW347PRMOYIPKGHODVYJAURJCPYJ2MPCM77ZCHST2BBQOHB3W`).
+2. **Locked the reserve**: sent exactly 10,000,000 real CAC to
+   `stellar-reserve` (confirmed on-chain, single UTXO, height 1004,
+   txid `56b58c08b91c14fce6b8f55d17f5c5c565f3b20e7c5775b5206ed66280f42223`).
+3. **Issued the asset**: ran `setup_asset.py` — distributor established a
+   trustline, issuer sent 10,000,000 `CAC` to the distributor. Verified
+   via Horizon: distributor held exactly `CAC: 10000000.0000000`.
+4. **Seeded liquidity**: ran `place_sell_offer.py` — a resting DEX sell
+   offer from the distributor for 500,000 CAC against XLM at a price of
+   1/14 (the owner's chosen initial rate: 1 XLM = 14 CAC). Verified live
+   on Horizon as offer `1851427700`.
+5. **Published proof-of-reserve**: `website/legal/proof-of-reserve.html`
+   — a page that fetches the `stellar-reserve` balance (CAC explorer API)
+   and the issued Stellar `CAC` supply (Horizon `/assets`) live, client
+   side, and compares them, rather than asserting a number. Linked from
+   the footer and every legal page's nav.
+6. **Disclosed the risk**: added §10 to `risk-disclosure.html`
+   (`id="stellar-iou"`) explaining the IOU/custodial nature of the
+   Stellar asset, what it depends on, and linking to the proof-of-reserve
+   page — matching how the custodial staking pool is disclosed in §5 of
+   that same page.
 
-- Funding the two Stellar accounts with real XLM (a real transfer of
-  value).
-- Deciding how much real CAC to lock as the reserve, and therefore how
-  much of the Stellar `CAC` asset gets issued.
-- Actually running `setup_asset.py`, creating an AMM pool or DEX orders,
-  or moving anything to/from the `stellar-reserve` wallet.
-- Locking the issuer account's master key weight to 0 (the standard way
-  to cap further issuance) — needs to happen only after the reserve
-  amount is truly final.
+**Still deliberately not done** — the project owner's call, not something
+to invent or execute unilaterally: locking the issuer account's master
+key weight to 0 (or moving it to multisig), the standard Stellar way to
+cap further issuance so the reserve backing can never be diluted. Left
+open until the 10,000,000 CAC reserve amount is treated as permanently
+final rather than merely current.

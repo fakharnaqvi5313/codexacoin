@@ -17,9 +17,10 @@ from stellar_sdk import Server, Keypair, TransactionBuilder, Asset, Network
 HORIZON_URL = "https://horizon.stellar.org"  # mainnet
 ASSET_CODE = "CAC"
 
-# Set this to exactly the amount of real CAC locked in the stellar-reserve
-# wallet before running. Left unset deliberately -- do not guess a number.
-ISSUE_AMOUNT = None
+# Set to exactly the amount of real CAC locked in the stellar-reserve
+# wallet. Confirmed on-chain 2026-08-03: 10,000,000 CAC in a single UTXO
+# at height 1004, address CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS.
+ISSUE_AMOUNT = 10000000
 
 
 def load_secrets():

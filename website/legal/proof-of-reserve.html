@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Proof of Reserve — CodexaCoin (CAC) on Stellar</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/assets/favicon-32.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/logo.png" alt="" class="brand-mark" />
+      <span class="brand-word">CodexaCoin</span>
+    </a>
+  </div>
+</header>
+
+<div class="legal-wrap">
+  <a class="legal-back" href="/">← Back to codexacoin.com</a>
+  <h1>Proof of Reserve — CAC on Stellar</h1>
+  <p class="legal-meta">Last updated: August 3, 2026</p>
+
+  <nav class="legal-nav">
+    <a href="/legal/privacy.html">Privacy Policy</a>
+    <a href="/legal/terms.html">Terms &amp; Conditions</a>
+    <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    <a href="/legal/aml-kyc.html">AML/KYC Policy</a>
+    <a href="/legal/acceptable-use.html">Acceptable Use Policy</a>
+  </nav>
+
+  <div class="legal-notice">
+    The <code>CAC</code> asset on Stellar is an IOU, not native CAC — see
+    <a href="/legal/risk-disclosure.html#stellar-iou">Risk Disclosure §10</a>
+    for what that means. This page exists so that claim is checkable, not
+    just asserted. The two numbers below are fetched live, in your browser,
+    directly from the CAC block explorer and Stellar's own Horizon API — the
+    same public sources anyone can query themselves.
+  </div>
+
+  <div class="live-stats por-grid" id="por-stats" aria-live="polite">
+    <div class="live-stat">
+      <span class="live-stat-label">Real CAC locked in reserve</span>
+      <span class="live-stat-value" id="por-reserve">—</span>
+    </div>
+    <div class="live-stat">
+      <span class="live-stat-label">CAC asset issued on Stellar</span>
+      <span class="live-stat-value" id="por-issued">—</span>
+    </div>
+    <div class="live-stat">
+      <span class="live-stat-label">Backing status</span>
+      <span class="live-stat-value" id="por-status">—</span>
+    </div>
+  </div>
+  <p class="live-stats-note" id="por-note">Loading live figures…</p>
+
+  <h2>1. How this works</h2>
+  <p>
+    <code>CAC</code> on Stellar is issued by a dedicated issuer account and
+    held/traded through a separate distributor account. Every unit of
+    <code>CAC</code> that exists on Stellar is only backed because a
+    matching amount of real CAC sits, untouched, in a dedicated wallet on
+    the actual CodexaCoin chain. The claim being made is simple:
+    <strong>reserve balance ≥ issued supply, always.</strong>
+  </p>
+
+  <h2>2. Verify it yourself</h2>
+  <p>
+    Don't take the numbers above on faith — query the same public sources
+    directly:
+  </p>
+  <ul>
+    <li><strong>Reserve wallet (real CAC chain)</strong> —
+      <code>CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS</code>. Check it on the
+      <a href="/blockexplorer/#/address/CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS" target="_blank" rel="noopener">CodexaCoin block explorer</a>
+      or query
+      <code>https://codexacoin.com/api/address/CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS</code>
+      directly.</li>
+    <li><strong>Issuer account (Stellar)</strong> —
+      <code>GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y</code>.
+      View on
+      <a href="https://stellar.expert/explorer/public/account/GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y" target="_blank" rel="noopener">stellar.expert</a>
+      or Horizon's
+      <code>/assets?asset_code=CAC&amp;asset_issuer=GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y</code>.</li>
+    <li><strong>Distributor account (Stellar, holds circulating supply + DEX offers)</strong> —
+      <code>GA3VI7RXW347PRMOYIPKGHODVYJAURJCPYJ2MPCM77ZCHST2BBQOHB3W</code>.
+      View on
+      <a href="https://stellar.expert/explorer/public/account/GA3VI7RXW347PRMOYIPKGHODVYJAURJCPYJ2MPCM77ZCHST2BBQOHB3W" target="_blank" rel="noopener">stellar.expert</a>.</li>
+  </ul>
+
+  <h2>3. What this is not</h2>
+  <p>
+    This is not a formal, independently-audited attestation. Nobody outside
+    the CodexaCoin project has reviewed this process. It's a self-reported,
+    but independently checkable, comparison of two public on-chain numbers —
+    the same minimum bar any issuer of a reserve-backed asset should clear,
+    not a substitute for real third-party audit. The issuer's Stellar
+    signing key has not yet been locked (multisig or master-weight-zero);
+    until it is, the project retains the technical ability to issue more
+    <code>CAC</code> on Stellar than is backed. We haven't done so, and
+    have no plan to, but you should not take that on faith either — that's
+    exactly why this page checks the numbers live rather than describing
+    intentions.
+  </p>
+
+  <p style="margin-top:32px">
+    <a href="mailto:support@codexacoin.com">support@codexacoin.com</a>
+  </p>
+</div>
+
+<script>
+(function () {
+  var fmt = function (n) { return Number(n).toLocaleString('en-US', { maximumFractionDigits: 7 }); };
+  var reserveEl = document.getElementById('por-reserve');
+  var issuedEl = document.getElementById('por-issued');
+  var statusEl = document.getElementById('por-status');
+  var noteEl = document.getElementById('por-note');
+
+  var reserveAddr = 'CPC7aKaDBkxFVTBugZGojSm8kwWeQ5qyfS';
+  var issuerKey = 'GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y';
+
+  var reserveCac = null;
+  var issuedCac = null;
+
+  function maybeCompare() {
+    if (reserveCac === null || issuedCac === null) return;
+    if (reserveCac >= issuedCac) {
+      statusEl.textContent = 'Fully backed';
+      statusEl.style.color = 'var(--green)';
+      noteEl.textContent = 'Reserve covers 100% of issued supply, verified live just now against both chains.';
+    } else {
+      statusEl.textContent = 'Under-backed';
+      statusEl.style.color = '#f87171';
+      noteEl.textContent = 'Reserve does not currently cover issued supply — do not treat CAC on Stellar as fully backed right now.';
+    }
+  }
+
+  fetch('https://codexacoin.com/api/address/' + reserveAddr)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      reserveCac = Number(d.balance_satoshis) / 1e8;
+      reserveEl.textContent = fmt(reserveCac) + ' CAC';
+      maybeCompare();
+    })
+    .catch(function () {
+      reserveEl.textContent = 'unavailable';
+    });
+
+  fetch('https://horizon.stellar.org/assets?asset_code=CAC&asset_issuer=' + issuerKey)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var rec = d._embedded && d._embedded.records && d._embedded.records[0];
+      var amount = rec && (rec.balances ? rec.balances.authorized : rec.amount);
+      issuedCac = amount ? Number(amount) : 0;
+      issuedEl.textContent = fmt(issuedCac) + ' CAC';
+      maybeCompare();
+    })
+    .catch(function () {
+      issuedEl.textContent = 'unavailable';
+    });
+})();
+</script>
+
+</body>
+</html>

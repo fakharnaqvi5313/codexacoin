@@ -399,6 +399,9 @@ code {
 .honesty-item p { margin: 0; font-size: 13.5px; color: var(--text-dim); }
 .honesty-item a { color: var(--gold); }
 
+/* proof of reserve */
+.por-grid { grid-template-columns: repeat(3, 1fr); max-width: 100%; margin: 28px 0 0; box-shadow: none; }
+
 /* footer */
 .site-footer { border-top: 1px solid var(--border); padding: 36px 24px; }
 .footer-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; }

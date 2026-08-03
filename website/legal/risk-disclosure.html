@@ -29,6 +29,7 @@
     <a href="/legal/terms.html">Terms &amp; Conditions</a>
     <a href="/legal/aml-kyc.html">AML/KYC Policy</a>
     <a href="/legal/acceptable-use.html">Acceptable Use Policy</a>
+    <a href="/legal/proof-of-reserve.html">Proof of Reserve</a>
   </nav>
 
   <div class="legal-notice">
@@ -140,6 +141,43 @@
     project has documented and fixed real bugs found during development
     (see the public <code>CHANGELOG.md</code>) — a sign of active,
     transparent maintenance, but not a guarantee against future issues.
+  </p>
+
+  <h2 id="stellar-iou">10. The Stellar <code>CAC</code> asset is an IOU, not native CAC</h2>
+  <p>
+    CodexaCoin's own chain has no bridge to Stellar or anywhere else — none
+    is technically possible without a trusted intermediary. The
+    <code>CAC</code> asset tradeable on Stellar's DEX is a separate,
+    Stellar-native "credit asset" issued by a project-controlled account,
+    only worth anything because the project holds real CAC 1:1 in a
+    dedicated reserve wallet and has committed to keeping it that way. This
+    is a custodial liability, the same in kind as the custodial staking pool
+    described above (§5) — not a trustless representation of the coin you
+    hold in a self-custody wallet.
+  </p>
+  <p>
+    Specifically, holding or trading <code>CAC</code> on Stellar depends on:
+  </p>
+  <ul>
+    <li><strong>The issuer honoring redemption</strong> — nothing on Stellar
+      itself forces the issuer to keep the reserve funded, or to redeem
+      Stellar <code>CAC</code> for real CAC. It depends on the project
+      continuing to do so voluntarily.</li>
+    <li><strong>The issuer's Stellar signing key</strong> — until it's
+      locked down (multisig, or its master key weight set to 0), the
+      account that created the asset retains the technical ability to
+      issue more of it than is backed.</li>
+    <li><strong>Reserve wallet security</strong> — the real CAC backing the
+      Stellar asset sits in a wallet on the CodexaCoin chain itself, subject
+      to the same key-security considerations as any other wallet.</li>
+  </ul>
+  <p>
+    A live, independently-checkable comparison of the reserve balance
+    against the issued Stellar supply is published at
+    <a href="/legal/proof-of-reserve.html">Proof of Reserve</a> — check it
+    yourself rather than taking "backed 1:1" as a bare claim. As with
+    everything else on this page: only trade or hold Stellar
+    <code>CAC</code> with funds you could afford to lose entirely.
   </p>
 
   <p style="margin-top:32px">
