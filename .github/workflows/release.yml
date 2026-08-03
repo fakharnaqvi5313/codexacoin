@@ -186,13 +186,28 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: [linux, windows, macos]
+    # macOS runners on the shared GitHub-hosted pool have repeatedly gotten
+    # stuck queued for 75-90+ minutes with no error and no reported
+    # incident (checked: no other jobs competing for the runner anywhere
+    # in the account, no billing restriction, no GitHub status incident).
+    # Not worth blocking Linux+Windows releases on that flakiness --
+    # publish as soon as those two are ready. macos still builds above and
+    # its artifact (once/if it completes) can be attached to the release
+    # by hand; revisit gating on it again if the queue issue clears up.
+    needs: [linux, windows]
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/download-artifact@v5
         with:
           path: artifacts
+          pattern: linux-x86_64
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          pattern: windows-x86_64
           merge-multiple: true
 
       - name: List staged artifacts
