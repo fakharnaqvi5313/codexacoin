@@ -1086,6 +1086,32 @@ above.
 
 ---
 
+## Seeded (and disclosed) initial chart history on the CAC/XLM pair
+
+### 2026-08-03
+
+- Placed one small round-trip trade -- a project-controlled "trader"
+  account bought ~28 CAC for ~2 XLM against the distributor's resting
+  offer, then sold it back for ~1.87 XLM -- so third-party chart viewers
+  (stellar.expert etc.) show something other than a blank chart. Flagged
+  up front that this is a wash trade (both sides project-controlled, not
+  organic demand) before doing anything; owner chose to proceed with
+  public disclosure rather than skip it or do it quietly.
+- Hit `MANAGE_BUY_OFFER_CROSS_SELF` three times attempting the second
+  leg -- Stellar rejects an account placing a buy offer that would cross
+  its own resting sell offer. Diagnosed by decoding the failed
+  transactions' `result_xdr`, not guessed. Fixed by bidding at 1/15
+  instead of the original 1/14, a small bid/ask spread rather than an
+  identical round-trip price.
+- Both trades verified live on Horizon (tx `7de68167...`, buy,
+  2026-08-03T13:37:16Z; tx `ef7f58e2...`, sell, 2026-08-03T13:46:08Z) --
+  disclosed by name in a new section 3 of `proof-of-reserve.html` so
+  nobody mistakes the resulting candle for real trading demand.
+- See `PARAMETERS.md` section 18.2 for the full writeup, including the
+  exact failure diagnosis.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

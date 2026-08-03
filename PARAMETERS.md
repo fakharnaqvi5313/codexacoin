@@ -1961,3 +1961,46 @@ key weight to 0 (or moving it to multisig), the standard Stellar way to
 cap further issuance so the reserve backing can never be diluted. Left
 open until the 10,000,000 CAC reserve amount is treated as permanently
 final rather than merely current.
+
+### 18.2 Chart-history seeding (2026-08-03) — done, disclosed
+
+The project owner asked for a couple of small trades so the `CAC/XLM`
+pair wouldn't show a completely empty chart on third-party viewers
+(stellar.expert etc.). Flagged directly before doing anything: with only
+the distributor holding `CAC`, any counterparty would necessarily also be
+project-controlled, making this a wash trade — fabricated activity, not
+organic demand — which sits in tension with this project's own
+"verifiable, not asserted" positioning (the proof-of-reserve page, the
+homepage's "What we won't tell you" section). Given the choice between
+skipping it, doing it with public disclosure, or doing it quietly, the
+owner chose **disclosure**: do the trades, then say so plainly wherever
+the chart is referenced.
+
+- Generated a third Stellar keypair (`stellar-issuer/generate_trader_key.py`)
+  — a "trader" account, `GA2EI7TXSFAFXVHBNARVDBQQOPZXQ4K2I6FOYOJ7JZR7VNQ2YGEXZO6T`,
+  used only as the counterparty. Key generation alone touches no chain and
+  moves no funds, so this step was run directly rather than handed to the
+  owner (unlike every step below, which moves real value).
+- Owner funded the trader account with 10 XLM.
+- `seed_chart_history.py` ran the trustline + first leg (trader bought
+  ~28 CAC for ~2 XLM, crossing the distributor's existing resting sell
+  offer). This filled correctly on the first attempt.
+- The second leg failed three times with `MANAGE_BUY_OFFER_CROSS_SELF`:
+  Stellar's protocol rejects an account placing a buy offer at a price
+  that would cross its *own* resting offer (here, the distributor's
+  existing 1/14 sell offer) — exactly the self-trade protection that,
+  ironically, this whole exercise is deliberately working around one
+  layer up (using a *second* account as counterparty instead). Root
+  cause found by decoding the failed transactions' `result_xdr` via
+  `stellar_sdk.xdr.TransactionResult` rather than guessing. Fixed by
+  bidding at 1/15 instead of 1/14 (`finish_chart_history.py`, `BUY_PRICE`)
+  — close enough to the intended ~2 XLM trade size, and a bid/ask spread
+  is normal market behavior anyway, not a workaround that looks synthetic.
+- Both trades now live: buy (~28 CAC for 2 XLM,
+  tx `7de6816752e2bcc8a00fb3b5f66b44c30cb03e2d67f40c8804e403417f0741db`,
+  2026-08-03T13:37:16Z) and sell (~28 CAC for ~1.87 XLM,
+  tx `ef7f58e2fde332e974517a8945ce0397194463e42dcd07fdc41b8db27efea39d`,
+  2026-08-03T13:46:08Z). Verified via Horizon's `/trades` endpoint, not
+  just trusted from script output.
+- Disclosed as §3 of `proof-of-reserve.html`, naming both transactions
+  and stating plainly that both sides were project-controlled.

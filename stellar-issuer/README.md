@@ -68,3 +68,29 @@ not been set to 0 (or moved to multisig) — the standard Stellar way to
 permanently cap further issuance. That's a one-way decision, left for the
 project owner once 10,000,000 CAC is treated as the final reserve amount
 rather than merely the current one.
+
+## Chart-history seeding (2026-08-03)
+
+A separate, smaller piece of work: the owner asked for a couple of small
+trades so the `CAC/XLM` pair wouldn't show a blank chart on third-party
+viewers. Since the distributor is the only account holding `CAC`, any
+counterparty is necessarily also project-controlled — this is a wash
+trade, disclosed as such in
+[proof-of-reserve.html §3](../website/legal/proof-of-reserve.html).
+
+- `generate_trader_key.py` — generates a third keypair
+  (`GA2EI7TXSFAFXVHBNARVDBQQOPZXQ4K2I6FOYOJ7JZR7VNQ2YGEXZO6T`) used only
+  as the trade counterparty. Pure key generation, no chain interaction —
+  safe to run directly.
+- `seed_chart_history.py` — trustline + first leg (trader buys CAC,
+  crossing the distributor's resting sell offer). **Only run once**, not
+  designed to be re-run after it succeeds.
+- `finish_chart_history.py` — second leg (distributor places a resting
+  buy offer, trader sells back into it). Bids at 1/15 rather than 1/14 to
+  avoid `MANAGE_BUY_OFFER_CROSS_SELF` (an account can't cross its own
+  resting offer — the distributor already has one at 1/14).
+- Both trades live: buy
+  (`7de6816752e2bcc8a00fb3b5f66b44c30cb03e2d67f40c8804e403417f0741db`,
+  2026-08-03T13:37:16Z) and sell
+  (`ef7f58e2fde332e974517a8945ce0397194463e42dcd07fdc41b8db27efea39d`,
+  2026-08-03T13:46:08Z).
