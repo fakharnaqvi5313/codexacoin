@@ -2004,3 +2004,104 @@ the chart is referenced.
   just trusted from script output.
 - Disclosed as §3 of `proof-of-reserve.html`, naming both transactions
   and stating plainly that both sides were project-controlled.
+
+## 19. Uniswap listing via a wrapped ERC-20 on Base (2026-08-03)
+
+User asked whether CAC shows on CoinGecko/CoinCodex (no — confirmed via
+their own search APIs/pages returning zero results), then what those
+platforms actually require (real, tracked exchange volume — not a form
+to fill out; CoinGecko's own listing terms confirm no fee and no
+published liquidity minimum, but a hard "must already be trading
+somewhere we track" requirement), then whether GeckoTerminal/CoinGecko
+would pick up a Uniswap listing automatically (yes for GeckoTerminal --
+confirmed it indexes any Uniswap pool algorithmically, no application;
+CoinGecko's main coin page still needs the request form, but a real
+Uniswap pool is exactly the evidence that form is built around, unlike
+the near-zero-volume Stellar SDEX offer). Asked to scope Base vs.
+Arbitrum vs. Ethereum mainnet vs. BNB Chain and recommend one --
+recommended **Base**, reasoning: gas is cheap on all of them now
+(mainnet dropped to ~0.227 Gwei / ~$0.01-2 per tx by mid-2026, per
+Etherscan's own gas tracker -- no longer the deciding factor it used to
+be), but Base's Coinbase-native on-ramp gives a brand-new, zero-audience
+asset the easiest path to its first real traders; BNB Chain was ruled
+out because PancakeSwap, not Uniswap, dominates BSC volume, making
+"list on Uniswap" there a fight against the actual liquidity current.
+User delegated the final call entirely ("now it's in your hand").
+
+This is a **second, separate custodial IOU** from the Stellar one (see
+§18) -- CAC has no native EVM presence, so a Uniswap listing necessarily
+means another wrapped, reserve-backed representation, not a bridge.
+Same honesty obligations apply, duplicated for a new chain.
+
+### 19.1 Design choice: fixed supply, no admin functions at all
+
+`base-issuer/contracts/CodexaCoinBase.sol` mints its entire supply once,
+in the constructor, to the deployer. No owner, no mint function, no
+admin role whatsoever -- provably incapable of further issuance from
+deployment onward. This is a deliberate improvement over the Stellar
+issuer, whose master key still needs to be manually locked later (see
+§18.1's "still deliberately not done") to get the same guarantee; doing
+it right from the start costs nothing extra on a fresh contract.
+
+### 19.2 What's been set up (infrastructure only, no funds moved yet)
+
+Same rule as every other real-value step across §18/§18.2: preparation
+and verification only, no financial transaction executed by the
+assistant. What was safe to do directly (no chain interaction, no funds
+moved) was done directly, matching the precedent already set for
+Stellar keypair generation:
+
+- **Reserve wallet created** on the CAC chain: new wallet `base-reserve`
+  on the live VPS node, address `CYKfFa2cfXgKjcLBNPTNFNYBoiNsFfjZV1`.
+  Nothing sent to it yet.
+- **Reserve amount decided**: 2,000,000 CAC -- a deliberately smaller,
+  more conservative amount than the Stellar reserve (10,000,000), given
+  this is a second, still-unproven venue.
+- **Deployer/distributor EVM wallet generated** directly (pure local key
+  generation, no chain interaction, same reasoning as the Stellar
+  keypairs): `0x744a7f868eBD6Ea933AE49AB8424873CE2894f77`.
+- **Hardhat project built** in `base-issuer/`: the contract above,
+  `deploy.js` (mints the fixed supply to the deployer), and
+  `create_pool_and_seed.js` (creates the CAC/WETH Uniswap V2 pool via
+  Router02's `addLiquidityETH`, which auto-creates the pair if it
+  doesn't exist, and seeds it with 0.05 ETH + 7,400 CAC).
+- **Pool sizing rationale**: chosen so the Base pool implies roughly the
+  same CAC price as the existing Stellar peg (1 XLM = 14 CAC), using
+  spot prices checked at the time (XLM ~$0.175, ETH ~$1,850) => 1 CAC
+  ~= $0.0125 => 1 ETH ~= 148,000 CAC. There's no bridge between the two
+  IOUs to arbitrage them into alignment, so keeping the two venues'
+  implied prices coherent is a manual, deliberate choice, not automatic.
+- **Uniswap V2 Router02/Factory/WETH addresses on Base verified two
+  ways**, not just trusted from Uniswap's own docs: (1) independently
+  cross-checked each address directly on BaseScan (contract name,
+  verification status, age, real transaction volume), and (2) called
+  the real Router02 contract's own `factory()` and `WETH()` view
+  functions live against Base mainnet and confirmed they return exactly
+  the Factory and WETH addresses being used -- the strongest available
+  verification, since it comes from the Router contract itself rather
+  than any third-party listing.
+- **Local dry run**: `deploy.js` was successfully dry-run against a
+  forked copy of real Base mainnet state (via Hardhat's forking,
+  pinned to a fixed block to work around an EDR hardfork-history
+  lookup quirk for chain 8453). A full dry run of
+  `create_pool_and_seed.js`'s `addLiquidityETH` call specifically was
+  not completed -- Hardhat's EDR backend couldn't resolve a hardfork
+  for view-call simulation against the forked Base state even after
+  pinning the block and setting explicit hardfork config, a local
+  tooling limitation rather than a sign of a bug in the script. Given
+  that limitation, verification leaned on point (2) above plus using
+  the standard, extensively-documented Uniswap V2 Router integration
+  pattern exactly as published.
+
+### 19.3 Not yet done -- the project owner's action
+
+1. Send 2,000,000 CAC to `base-reserve`
+   (`CYKfFa2cfXgKjcLBNPTNFNYBoiNsFfjZV1`).
+2. Send ~0.07 ETH on Base to the deployer address above (covers gas for
+   two transactions plus the 0.05 ETH going into the pool).
+3. Run `npm run deploy` in `base-issuer/`.
+4. Run `npm run seed-pool` in `base-issuer/`.
+
+Once done: verify on-chain (contract supply, reserve balance, pool
+reserves), extend `proof-of-reserve.html` and `risk-disclosure.html` for
+this second custodial liability, and update this file + `CHANGELOG.md`.

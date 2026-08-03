@@ -1112,6 +1112,43 @@ above.
 
 ---
 
+## Scoped and started a Uniswap listing on Base (wrapped ERC-20)
+
+### 2026-08-03
+
+- Answered whether CAC shows on CoinGecko/CoinCodex (no) and what those
+  platforms actually require (real tracked trading volume, not a form --
+  confirmed CoinGecko's own listing terms have no fee/liquidity minimum
+  published but do require the asset already trading somewhere tracked;
+  GeckoTerminal indexes any Uniswap pool automatically with no
+  application, which is the more realistic near-term path).
+- Scoped Base vs. Arbitrum vs. Ethereum mainnet vs. BNB Chain and
+  recommended Base -- gas is cheap everywhere now (mainnet ~$0.01-2/tx
+  as of mid-2026), so the deciding factor was Coinbase's on-ramp making
+  Base easiest for a zero-audience asset to reach real traders; BNB
+  Chain ruled out since PancakeSwap, not Uniswap, dominates BSC volume.
+  Owner delegated the final decision.
+- Built `base-issuer/`: a fixed-supply ERC-20 (`CodexaCoinBase.sol`) with
+  no owner and no mint function at all -- an improvement over the
+  Stellar issuer, which still needs its master key locked separately to
+  get the same guarantee. Deploy script and a Uniswap V2 pool-seeding
+  script (`addLiquidityETH`, auto-creates the pair), sized at 0.05 ETH +
+  7,400 CAC to imply roughly the same CAC price as the Stellar peg.
+- Verified the Uniswap V2 Router02/Factory/WETH addresses on Base two
+  ways: independently against BaseScan, and by calling the live
+  Router02 contract's own `factory()`/`WETH()` functions and confirming
+  they match -- stronger than trusting either source alone.
+- Created the `base-reserve` CAC-chain wallet
+  (`CYKfFa2cfXgKjcLBNPTNFNYBoiNsFfjZV1`) and generated the deployer/
+  distributor EVM wallet
+  (`0x744a7f868eBD6Ea933AE49AB8424873CE2894f77`) -- both safe, no-value-
+  moved steps done directly. Funding, deployment, and pool creation are
+  still the owner's actions, not yet done. See `PARAMETERS.md` section
+  19 for the full writeup, including a local-fork tooling limitation
+  hit (and worked around) while dry-running the scripts.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

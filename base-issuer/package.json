@@ -1,0 +1,20 @@
+{
+  "name": "base-issuer",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Deploys a reserve-backed wrapped CAC ERC-20 on Base and seeds an initial Uniswap V2 pool.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network base",
+    "seed-pool": "hardhat run scripts/create_pool_and_seed.js --network base"
+  },
+  "devDependencies": {
+    "hardhat": "^2.22.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "ethers": "^6.13.0"
+  }
+}
