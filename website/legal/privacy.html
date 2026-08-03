@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — CodexaCoin</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/assets/favicon-32.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/logo.png" alt="" class="brand-mark" />
+      <span class="brand-word">CodexaCoin</span>
+    </a>
+  </div>
+</header>
+
+<div class="legal-wrap">
+  <a class="legal-back" href="/">← Back to codexacoin.com</a>
+  <h1>Privacy Policy</h1>
+  <p class="legal-meta">Last updated: August 3, 2026</p>
+
+  <nav class="legal-nav">
+    <a href="/legal/terms.html">Terms &amp; Conditions</a>
+    <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    <a href="/legal/aml-kyc.html">AML/KYC Policy</a>
+    <a href="/legal/acceptable-use.html">Acceptable Use Policy</a>
+  </nav>
+
+  <div class="legal-notice">
+    <strong>Not a substitute for legal advice.</strong> This policy was drafted to
+    describe, accurately and in plain language, what the CodexaCoin software and
+    services actually do with data today. It has not been reviewed by a licensed
+    lawyer and does not establish CodexaCoin's registered legal identity or
+    regulatory status in any jurisdiction. If you operate or rely on this policy
+    commercially, have it reviewed by qualified counsel first.
+  </div>
+
+  <p>
+    This policy covers <strong>codexacoin.com</strong>, the CodexaCoin web wallet,
+    the CodexaCoin Android app, the CodexaCoin desktop wallets (macOS, Windows,
+    Linux), the block explorer, and the staking gateway API that some of those
+    apps talk to (together, the "Services"), operated by the CodexaCoin project
+    ("we", "us"). It does not cover third-party sites we link to (including
+    GitHub).
+  </p>
+
+  <h2>1. The short version</h2>
+  <p>
+    Most of what CodexaCoin is doesn't touch us at all. The desktop, mobile, and
+    web wallets generate your recovery phrase and private keys entirely on your
+    own device; we never see them, never store them, and cannot recover them for
+    you if you lose them. We collect account data (email, self-attested identity
+    fields) only if you choose to create an account for the custodial staking
+    pool. We don't use cookies. We don't use any third-party analytics or
+    advertising trackers, anywhere, in any product.
+  </p>
+
+  <h2>2. Data we never see</h2>
+  <p>
+    Your wallet's recovery phrase (mnemonic) and private keys are generated and
+    stored only on your own device — in your OS Keychain/Keystore on desktop and
+    mobile, or in your browser's local storage for the web wallet. None of this
+    is transmitted to us, ever, for any wallet operation except the one
+    exception below (custodial pool deposits). If you lose your recovery phrase,
+    we have no way to help you recover funds held in a self-custody wallet — see
+    the <a href="/legal/risk-disclosure.html">Risk Disclosure</a>.
+  </p>
+
+  <h2>3. Data collected if you create a staking account</h2>
+  <p>
+    Creating an account (required only for the custodial staking pool, referral
+    program, and push notifications — never for basic send/receive/staking-status
+    use of any wallet) collects:
+  </p>
+  <ul>
+    <li><strong>Email address</strong> and a <strong>password</strong> (stored as
+      a salted hash, never in plain text).</li>
+    <li><strong>Full name, date of birth, ID type (national ID card or
+      passport), and ID number</strong> — see the
+      <a href="/legal/aml-kyc.html">AML/KYC Policy</a> for exactly how this is
+      used and its real limitations. The ID number is encrypted at rest; your
+      name and date of birth currently are not.</li>
+    <li>A <strong>referral code</strong> you used or generated, and, if you refer
+      others, a count of how many people used your code (not their identities).</li>
+    <li>If you deposit into the staking pool: the <strong>deposit address</strong>
+      generated for you and the resulting <strong>deposit/reward amounts and
+      history</strong>, so your balance can be shown to you accurately.</li>
+    <li>If you enable browser push notifications: your browser's
+      <strong>push subscription details</strong> (an endpoint URL and encryption
+      keys), used only to deliver deposit/reward notifications to you.</li>
+  </ul>
+
+  <h2>4. Blockchain data is public — always</h2>
+  <p>
+    CodexaCoin is a public blockchain. Any address you use, any amount you send
+    or receive, and the fact that a transaction happened are permanently and
+    publicly visible on the chain and on the block explorer, to anyone, forever
+    — that's inherent to how the technology works, not a choice we make.
+    Addresses aren't directly tied to your name unless something else (like this
+    account data) links them. Deleting your account here does not and cannot
+    remove anything from the blockchain itself.
+  </p>
+
+  <h2>5. Other data collected automatically</h2>
+  <p>
+    Like any web service, our servers log standard connection metadata
+    (IP address, timestamp, requested endpoint) for security and abuse
+    prevention (e.g. rate-limiting login and signup attempts). We do not use
+    this for tracking, profiling, or advertising, and we don't share it with
+    any third party except as required by law.
+  </p>
+
+  <h2>6. Cookies and local storage</h2>
+  <p>
+    We do not use cookies anywhere on codexacoin.com or in the web wallet. The
+    web wallet uses your browser's <code>localStorage</code> to store your
+    wallet data (recovery phrase, settings) and <code>sessionStorage</code> for
+    your staking-account login session — both stay on your device and are
+    never transmitted except when you explicitly take an action (like
+    submitting a send transaction or logging in).
+  </p>
+
+  <h2>7. Who we share data with</h2>
+  <p>
+    We don't sell or rent your data. We don't use third-party analytics,
+    advertising networks, or tracking pixels — check the source code yourself,
+    it's public. Data may be disclosed if legally compelled (e.g. a valid court
+    order), or to protect the security and integrity of the Services (e.g.
+    investigating fraud or abuse).
+  </p>
+
+  <h2>8. How long we keep data</h2>
+  <p>
+    Account data is retained for as long as your account exists. We haven't yet
+    formalized an automatic deletion schedule for closed accounts — if you want
+    your off-chain account data deleted, email
+    <a href="mailto:support@codexacoin.com">support@codexacoin.com</a> and we'll
+    do it manually. Blockchain transaction data cannot be deleted by us or
+    anyone, for the reason in section 4.
+  </p>
+
+  <h2>9. Security</h2>
+  <p>
+    Passwords are hashed, never stored in plain text. ID numbers submitted at
+    signup are encrypted at rest. Session authentication uses signed,
+    time-limited tokens. That said, no system is perfectly secure, and this
+    project has not undergone a formal third-party security audit — see the
+    honesty section on the homepage and the
+    <a href="/legal/risk-disclosure.html">Risk Disclosure</a> for what that
+    means in practice.
+  </p>
+
+  <h2>10. Children</h2>
+  <p>
+    The Services are not directed at, and are not intended to be used by,
+    anyone under 18. We do not knowingly collect data from minors.
+  </p>
+
+  <h2>11. Your rights</h2>
+  <p>
+    You can request a copy of the off-chain account data we hold about you, or
+    request its deletion (subject to section 8's blockchain limitation and any
+    legal retention requirements), by emailing
+    <a href="mailto:support@codexacoin.com">support@codexacoin.com</a>.
+  </p>
+
+  <h2>12. Changes to this policy</h2>
+  <p>
+    If this policy changes, we'll update the "Last updated" date above. Material
+    changes will be noted on the homepage or in the app where practical.
+  </p>
+
+  <h2>13. Contact</h2>
+  <p>
+    <a href="mailto:support@codexacoin.com">support@codexacoin.com</a>
+  </p>
+</div>
+
+</body>
+</html>

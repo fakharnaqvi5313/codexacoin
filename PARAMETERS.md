@@ -1701,6 +1701,55 @@ genuinely different, not strictly better, artifact than the GUI-inclusive
 one already hosted. `SHA256SUMS`/`SHA256SUMS.asc` regenerated and
 re-verified against the live server to cover all seven files now hosted.
 
+### 16.8 Legal/policy pages, and a Microsoft Store submission blocker found early (2026-08-03)
+
+Added five legal pages under `website/legal/`: Privacy Policy, Terms &amp;
+Conditions (governing law: Pakistan, per explicit instruction), Risk
+Disclosure, AML/KYC Policy, and Acceptable Use Policy. Every factual claim
+in them was checked against what the code and infrastructure actually do
+(e.g. confirmed via `grep` that neither the site nor the web wallet sets
+any cookies at all -- both use `localStorage`/`sessionStorage` instead --
+before writing the Privacy Policy's cookie section that way; confirmed no
+third-party analytics/ad trackers exist anywhere in the codebase before
+claiming that). Each page carries a prominent, plain-language notice that
+it's a template reflecting the software's actual behavior, not a document
+reviewed by a licensed lawyer, and that CodexaCoin holds no license or
+regulatory registration anywhere. Linked from the site footer and from
+both the web wallet's and the Android app's signup forms (a policy nobody
+sees at signup doesn't do much).
+
+Separately, picked up the earlier request to prepare a Windows build for
+Microsoft Store submission. Fetched Microsoft's actual current Store
+Policies (version 7.19) rather than relying on memory, and found two
+provisions that directly block this project's situation:
+
+- **10.8.3**: products requiring "financial information" -- explicitly
+  including "private keys, or recovery phrases" -- must be submitted from
+  a **Company** developer account; individual accounts cannot.
+- **10.2.6**: cryptocurrency wallet apps specifically "must be distributed
+  by a Company account."
+
+Asked the user directly rather than assuming; confirmed their existing
+Microsoft Developer ID is an **Individual** account, which Store policy
+explicitly disallows for this category of app -- not a soft risk, a hard
+rejection at certification. Converting to a Company account requires real
+business-registration verification with Microsoft, which only the account
+owner can do. Also noted policy 10.2.9's requirement that a
+direct-download-URL submission be signed with a real Authenticode
+certificate chaining to the Microsoft Trusted Root Program, and installed
+*silently* (no installer UI) -- relevant since the user separately
+confirmed they have or can get a real code-signing certificate, which
+opens that path once the account-type blocker clears.
+
+Proceeded anyway with the genuinely useful, account-type-independent part
+of the prep: building an actual Windows **GUI** wallet (the existing
+Windows build is CLI-only) via the depends system's mingw target,
+including Qt this time -- the earlier attempt this session had skipped Qt
+specifically because its source tarball download kept stalling
+mid-transfer (found a leftover `.temp` file confirming this), which is
+worth retrying now that network conditions have been reliable for
+everything else built today.
+
 ## 17. Deferred: governance and hardware wallet support
 
 Two further ideas came up in the same "what else should we add?" pass

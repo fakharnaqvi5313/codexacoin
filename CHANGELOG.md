@@ -969,6 +969,35 @@ above.
 
 ---
 
+## Legal/policy pages added; Microsoft Store submission blocker found
+
+### 2026-08-03
+
+- Added Privacy Policy, Terms & Conditions (governing law: Pakistan),
+  Risk Disclosure, AML/KYC Policy, and Acceptable Use Policy pages under
+  `website/legal/`, linked from the site footer and both the web wallet's
+  and Android app's signup forms. Every factual claim checked against
+  what the code actually does (confirmed no cookies, no third-party
+  trackers, before writing those sections that way) rather than using
+  generic boilerplate.
+- Investigated Microsoft Store submission for a Windows GUI wallet.
+  Fetched Microsoft's current Store Policies directly rather than relying
+  on memory: policies 10.8.3 and 10.2.6 both require a **Company**
+  developer account for any app handling private keys/recovery phrases or
+  cryptocurrency wallets -- confirmed with the user that their existing
+  account is Individual, which Store policy explicitly disallows for this
+  category (a hard certification rejection, not a soft risk). Converting
+  requires real business verification with Microsoft that only the
+  account owner can do.
+- Proceeded with the account-type-independent prep work anyway: building
+  an actual Windows GUI wallet via the depends system (the existing
+  Windows build is CLI-only), including Qt this time -- the earlier
+  attempt had skipped it because the Qt source download kept stalling
+  mid-transfer.
+- See `PARAMETERS.md` section 16.8 for the full writeup.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

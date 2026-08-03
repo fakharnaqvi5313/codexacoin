@@ -290,6 +290,12 @@ class _StakingAuthFormState extends State<_StakingAuthForm> {
             'date of birth are not.',
             style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
+          const SizedBox(height: 8),
+          const Text(
+            'By signing up you agree to the Terms & Conditions, Privacy '
+            'Policy, and AML/KYC Policy at codexacoin.com/legal/.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
         ],
         const SizedBox(height: 20),
         FilledButton(
