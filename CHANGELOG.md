@@ -1173,6 +1173,11 @@ above.
   screen so a future camera/permission failure shows a real message
   instead of a blank screen.
 - Verified via `flutter analyze` (clean) and `flutter test` (all pass).
+- Rebuilt the release APK and redeployed it to
+  `codexacoin.com/downloads/CodexaCoin-android.apk`, replacing the old
+  broken build; `SHA256SUMS`/`SHA256SUMS.asc` regenerated and re-signed
+  to match. Local build needed `JAVA_HOME` pinned to JDK 17 (Gradle
+  7.6.3 doesn't support the machine's default JDK 22).
 
 ---
 
