@@ -1149,6 +1149,33 @@ above.
 
 ---
 
+## Fixed two real Android mobile-wallet send bugs
+
+### 2026-08-04
+
+- Fixed "type 'Null' is not a subtype of type 'String' in type cast" when
+  sending any amount: `send_screen.dart` read a `pubkey_hash` field off
+  each UTXO returned by the gateway's `/address/<addr>/utxos` endpoint,
+  but that endpoint only ever returns `txid`/`vout`/`value`/`height`/
+  `confirmations` (`vps-gateway/app.py`) -- the field never existed, so
+  the cast always failed on any real send attempt. The value doesn't
+  need to come from the server at all: every UTXO fetched here belongs
+  to this wallet's own single active address, so the pubkey hash is the
+  same for all of them and can be computed locally from the wallet's own
+  key -- exactly the pattern `web-wallet/app.js` already used correctly.
+  Added `WalletService.activePubkeyHash()` and had the send screen use
+  that instead of trusting a nonexistent API field.
+- Fixed QR-code scanning on Android: `AndroidManifest.xml` never declared
+  the `CAMERA` permission `mobile_scanner` requires, so the scanner
+  either failed silently or never got real camera access. Added the
+  permission (plus a non-required camera `<uses-feature>` so install
+  isn't blocked on cameraless devices) and an `errorBuilder` on the scan
+  screen so a future camera/permission failure shows a real message
+  instead of a blank screen.
+- Verified via `flutter analyze` (clean) and `flutter test` (all pass).
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

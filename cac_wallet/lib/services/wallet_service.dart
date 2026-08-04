@@ -133,6 +133,19 @@ class WalletService extends ChangeNotifier {
     return p2pkhAddress(hash, network);
   }
 
+  /// The hash160 of this wallet's own active key -- the same value every
+  /// UTXO fetched for [activeAddress] pays to, since this wallet only
+  /// derives a single P2PKH address (see the note on [activeAddress]).
+  /// Computed locally rather than trusted from the gateway response: the
+  /// UTXO endpoint doesn't return a pubkey_hash field at all (it only
+  /// returns txid/vout/value/height/confirmations -- see
+  /// vps-gateway/app.py's address_utxos handler), so this is the only
+  /// correct source for it, not just a convenience.
+  Uint8List activePubkeyHash() {
+    final key = _requireKey();
+    return hash160(key.publicKey);
+  }
+
   DerivedKey _requireKey() {
     if (_mnemonic == null) {
       throw StateError('No wallet loaded');

@@ -56,13 +56,17 @@ class _SendScreenState extends State<SendScreen> {
       if (utxoList.isEmpty) {
         throw StateError('No spendable funds found for this address');
       }
+      // The UTXO endpoint doesn't return a pubkey_hash field -- every UTXO
+      // here pays to this wallet's own single active address anyway, so
+      // it's computed locally once rather than read from the response.
+      final myPubkeyHash = wallet.activePubkeyHash();
       final utxos = utxoList.map((u) {
         final m = u as Map<String, dynamic>;
         return tx.Utxo(
           txid: _hexToBytes(m['txid'] as String),
           vout: m['vout'] as int,
           valueSatoshis: int.parse(m['value'].toString()),
-          pubkeyHash: _hexToBytes(m['pubkey_hash'] as String),
+          pubkeyHash: myPubkeyHash,
         );
       }).toList();
 
@@ -169,6 +173,17 @@ class _QrScanScreen extends StatelessWidget {
             Navigator.of(context).pop(barcodes.first.rawValue);
           }
         },
+        errorBuilder: (context, error, child) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Could not access the camera: ${error.errorCode.name}. '
+              'Check that camera access is allowed for this app in your '
+              'device settings.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       ),
     );
   }
