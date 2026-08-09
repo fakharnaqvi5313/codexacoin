@@ -2105,3 +2105,80 @@ Stellar keypair generation:
 Once done: verify on-chain (contract supply, reserve balance, pool
 reserves), extend `proof-of-reserve.html` and `risk-disclosure.html` for
 this second custodial liability, and update this file + `CHANGELOG.md`.
+
+## 20. Web wallet feature batch (2026-08-04)
+
+Asked what else could be added to the web wallet; proposed seven
+concrete gaps found by comparing against the mobile app and reading the
+existing code (QR receive/scan, session PIN lock, multisig UI on top of
+already-complete but unexposed `crypto.js` primitives, transaction
+detail view, address book, multi-address support), user said "build
+all." Implemented directly (no multi-agent workflow -- not requested),
+tested end to end in a real browser before considering it done.
+
+### 20.1 Design decisions worth recording
+
+- **PIN lock is real encryption, not a UI gate.** Checked how the
+  mnemonic is actually stored first (`localStorage`, plain text,
+  confirmed via reading `app.js`) before deciding the design: a PIN that
+  only gated which screen renders would do nothing against anyone
+  reading `localStorage` directly, which the onboarding screen's own
+  security note already flags as the realistic threat for this wallet.
+  `storage.js` uses PBKDF2 (200,000 iterations) + AES-256-GCM via the
+  browser's native `crypto.subtle` -- genuine protection at rest, stated
+  plainly as still only as strong as the PIN and offering nothing once
+  unlocked in an open tab.
+- **Multi-address is locally-tracked generation, not BIP44 gap-limit
+  discovery.** A wallet restored fresh on a different browser starts
+  back at index 0 and won't find addresses generated elsewhere -- real
+  gap-limit scanning (probe sequential indices until N consecutive
+  unused ones are found) was out of scope for this batch. Said
+  explicitly in-app (Receive screen) and in `web-wallet/README.md`,
+  matching this project's standing rule against silently shipping a
+  narrower version of something without saying so (see `activeAddress()`
+  in `cac_wallet/lib/services/wallet_service.dart` for the same pattern
+  on the mobile side).
+- **`buildAndSignTransaction` extended for per-input keys**, needed once
+  a send can spend UTXOs sitting at more than one derived address in the
+  same transaction (the original signature only supported one global
+  key for every input). Backward compatible: existing single-key callers
+  are unaffected, an input's own `privateKey`/`publicKeyCompressed`
+  override the global ones only when present. This is a call-signature
+  change, not a wire-format change, so it doesn't affect the
+  "mirrors cac_wallet/lib/crypto/transaction.dart exactly" claim in
+  crypto.js's header comment (that claim is about the serialized
+  transaction bytes, which are unchanged).
+- **Multisig UI supports sequential signing only**, not
+  `mergeMultisigProposals`'s parallel-copies case (cosigners signing
+  independently without passing through each other) -- a deliberate
+  scope cut, not an oversight, since sequential hand-off alone reaches
+  any m-of-n threshold and the crypto-layer function already exists for
+  later if the parallel case turns out to matter.
+- **Multisig identity is always index 0's key**, independent of whatever
+  address is "active" for receiving -- a cosigner set needs a stable
+  key, not one that changes every time someone taps "New address."
+
+### 20.2 Real bug found and fixed during testing
+
+`loadSettings()` cleared the PIN success/error message immediately after
+`btn-set-pin`/`btn-remove-pin` handlers set it (both called `loadSettings()`
+at the end, which unconditionally blanked both message elements) -- so
+neither confirmation message was ever actually visible to the user, just
+set then wiped in the same tick. Caught by testing the actual DOM state
+after the click rather than trusting the code read correct. Fixed by
+splitting the function: `refreshLockCardVisibility()` (toggles which
+lock-not-set/lock-is-set card shows, safe to call after an action) vs.
+`loadSettings()` (also clears messages, only correct on fresh screen
+entry).
+
+### 20.3 Verified, not just written
+
+Full browser walkthrough documented in `web-wallet/README.md`'s
+"Verification" section: wallet creation, QR receive rendering,
+multi-address generation + combined balance, address book, multisig
+address generation (redeem script/address checked byte-for-byte),
+the full PIN lock/unlock/wrong-PIN/lock-now/remove-PIN cycle across a
+real page reload, transaction detail modal, and the QR scanner's
+camera-denied error path. Multi-key signing and the full multisig
+propose-sign-sign-finalize round trip verified directly against
+`crypto.js` (no live gateway/funds available to test a real broadcast).

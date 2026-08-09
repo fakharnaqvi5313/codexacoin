@@ -13,6 +13,16 @@
     <div class="network-badge" id="network-badge">mainnet</div>
   </header>
 
+  <!-- App lock overlay -->
+  <div class="lock-overlay" id="lock-overlay" style="display:none">
+    <div class="card">
+      <p class="field-label">Enter your PIN to unlock</p>
+      <input id="lock-pin" type="password" inputmode="numeric" autocomplete="off" />
+      <button class="primary" id="btn-unlock">Unlock</button>
+      <div class="error" id="lock-error"></div>
+    </div>
+  </div>
+
   <main>
     <!-- Onboarding -->
     <section class="screen active" id="screen-onboarding">
@@ -39,11 +49,14 @@
       <div class="card">
         <p class="notice">Security note: unlike the mobile app (which stores your
            key in the OS Keychain/Keystore), this web wallet keeps your recovery
-           phrase in this browser's localStorage. That's meaningfully weaker
-           protection -- anyone with access to this browser profile, or a
-           malicious browser extension, can read it. Best used for testnet or
-           small amounts; the mobile app is the safer choice for real funds. See
-           README.md for the full reasoning.</p>
+           phrase in this browser's localStorage. Setting a PIN (Settings tab,
+           after creating/restoring a wallet) encrypts it at rest with a key
+           derived from that PIN (PBKDF2 + AES-GCM, via the browser's own Web
+           Crypto API) -- real protection against someone reading localStorage
+           directly, but it only holds up if your PIN itself isn't guessable,
+           and offers no protection once the wallet is unlocked in an open tab.
+           Best used for testnet or small amounts; the mobile app is the safer
+           choice for real funds. See README.md for the full reasoning.</p>
       </div>
     </section>
 
@@ -52,6 +65,7 @@
       <div class="card">
         <div class="balance" id="home-balance">0.00000000 CAC</div>
         <div class="balance-sub" id="home-address"></div>
+        <p class="notice small" id="home-address-count"></p>
       </div>
       <div class="error" id="home-error"></div>
     </section>
@@ -60,21 +74,56 @@
     <section class="screen" id="screen-send">
       <div class="card">
         <label class="field-label">Destination address</label>
-        <input id="send-address" placeholder="C..." />
+        <div class="row">
+          <input id="send-address" placeholder="C..." />
+          <button class="secondary qr-scan-btn" id="btn-scan-qr" type="button" title="Scan QR code">Scan</button>
+        </div>
         <label class="field-label">Amount (CAC)</label>
         <input id="send-amount" type="number" step="0.00000001" />
         <button class="primary" id="btn-send-confirm">Send</button>
         <div class="error" id="send-error"></div>
         <div class="success" id="send-success"></div>
       </div>
+      <div class="card" id="address-book-card">
+        <p class="field-label">Address book</p>
+        <div id="address-book-list"><p class="notice">No saved addresses yet.</p></div>
+        <div class="row">
+          <input id="new-book-label" placeholder="Label" />
+          <input id="new-book-address" placeholder="Address" />
+        </div>
+        <button class="secondary" id="btn-book-add">Save address</button>
+      </div>
     </section>
+
+    <!-- QR scan modal -->
+    <div class="modal-overlay" id="qr-scan-overlay" style="display:none">
+      <div class="card qr-scan-card">
+        <p class="field-label">Point your camera at a QR code</p>
+        <video id="qr-video" playsinline muted></video>
+        <canvas id="qr-scan-canvas" style="display:none"></canvas>
+        <div class="error" id="qr-scan-error"></div>
+        <button class="secondary" id="btn-qr-scan-cancel">Cancel</button>
+      </div>
+    </div>
 
     <!-- Receive -->
     <section class="screen" id="screen-receive">
       <div class="card">
+        <div class="qr-box"><canvas id="receive-qr"></canvas></div>
         <p class="field-label">Your receive address</p>
         <p class="mono" id="receive-address"></p>
         <button class="secondary" id="btn-copy-address">Copy address</button>
+      </div>
+      <div class="card">
+        <p class="field-label">Previously used addresses</p>
+        <p class="notice small">This wallet derives a new address each time you
+           tap "New address" below rather than automatically rotating one for
+           you -- balance and history are combined across every address you've
+           generated. It does not scan for addresses used elsewhere (e.g. by
+           another copy of this wallet restored from the same phrase) beyond
+           what's listed here.</p>
+        <div id="address-list"></div>
+        <button class="secondary" id="btn-new-address">New address</button>
       </div>
     </section>
 
@@ -84,6 +133,15 @@
         <p class="notice">Loading...</p>
       </div>
     </section>
+
+    <!-- Transaction detail modal -->
+    <div class="modal-overlay" id="tx-detail-overlay" style="display:none">
+      <div class="card tx-detail-card">
+        <p class="field-label">Transaction</p>
+        <div id="tx-detail-body"><p class="notice">Loading...</p></div>
+        <button class="secondary" id="btn-tx-detail-close">Close</button>
+      </div>
+    </div>
 
     <!-- Staking -->
     <section class="screen" id="screen-staking">
@@ -167,6 +225,57 @@
       </div>
     </section>
 
+    <!-- Multisig -->
+    <section class="screen" id="screen-multisig">
+      <div class="card">
+        <p class="notice">Create a shared N-of-M address, propose a spend,
+           collect signatures from cosigners, and broadcast once enough have
+           signed. Proposals are plain JSON -- send them to cosigners however
+           you like (email, a shared file); nothing here transmits them for
+           you.</p>
+      </div>
+      <div class="card">
+        <p class="field-label">1. Create a multisig address</p>
+        <p class="notice small">Your own compressed public key (included automatically): <span class="mono" id="my-pubkey"></span></p>
+        <label class="field-label">Cosigners' public keys (one per line, 33-byte compressed hex, not including your own)</label>
+        <textarea id="ms-pubkeys" rows="3"></textarea>
+        <label class="field-label">Signatures required (M)</label>
+        <input id="ms-m" type="number" min="1" value="2" />
+        <button class="primary" id="btn-ms-create">Generate address</button>
+        <div class="error" id="ms-create-error"></div>
+        <div id="ms-create-result" style="display:none">
+          <p class="field-label">Redeem script (share with cosigners -- required to spend)</p>
+          <p class="mono" id="ms-redeem-script"></p>
+          <p class="field-label">Multisig address</p>
+          <p class="mono" id="ms-address"></p>
+        </div>
+      </div>
+      <div class="card">
+        <p class="field-label">2. Propose a spend</p>
+        <label class="field-label">Multisig address (must have funds)</label>
+        <input id="ms-propose-address" />
+        <label class="field-label">Redeem script (hex)</label>
+        <textarea id="ms-propose-redeem" rows="2"></textarea>
+        <label class="field-label">Destination address</label>
+        <input id="ms-propose-to" />
+        <label class="field-label">Amount (CAC)</label>
+        <input id="ms-propose-amount" type="number" step="0.00000001" />
+        <button class="secondary" id="btn-ms-propose">Create proposal</button>
+        <div class="error" id="ms-propose-error"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">3. Sign / combine / broadcast a proposal</p>
+        <label class="field-label">Proposal JSON (paste one, or several to combine)</label>
+        <textarea id="ms-proposal-json" rows="6" class="mono"></textarea>
+        <div class="row">
+          <button class="secondary" id="btn-ms-sign">Sign with my key</button>
+          <button class="secondary" id="btn-ms-broadcast">Finalize &amp; broadcast</button>
+        </div>
+        <div class="error" id="ms-sign-error"></div>
+        <div class="success" id="ms-sign-success"></div>
+      </div>
+    </section>
+
     <!-- Settings -->
     <section class="screen" id="screen-settings">
       <div class="card">
@@ -175,6 +284,24 @@
           <button class="secondary" id="btn-net-mainnet">Mainnet</button>
           <button class="secondary" id="btn-net-testnet">Testnet</button>
         </div>
+      </div>
+      <div class="card" id="lock-settings-card">
+        <p class="field-label">App lock</p>
+        <div id="lock-not-set">
+          <p class="notice">No PIN set -- your recovery phrase is stored in plain
+             text in this browser (see the security note on the onboarding
+             screen).</p>
+          <input id="set-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Choose a PIN (4+ digits)" />
+          <input id="set-pin-confirm" type="password" inputmode="numeric" autocomplete="off" placeholder="Confirm PIN" />
+          <button class="primary" id="btn-set-pin">Set PIN</button>
+        </div>
+        <div id="lock-is-set" style="display:none">
+          <p class="notice">Your recovery phrase is encrypted at rest with a key derived from your PIN.</p>
+          <button class="secondary" id="btn-lock-now">Lock now</button>
+          <button class="danger" id="btn-remove-pin">Remove PIN (decrypt back to plain text)</button>
+        </div>
+        <div class="error" id="lock-settings-error"></div>
+        <div class="success" id="lock-settings-success"></div>
       </div>
       <div class="card">
         <button class="danger" id="btn-wipe-wallet">Wipe wallet</button>
@@ -188,6 +315,7 @@
     <button data-screen="receive">Receive</button>
     <button data-screen="history">History</button>
     <button data-screen="staking">Staking</button>
+    <button data-screen="multisig">Multisig</button>
     <button data-screen="settings">Settings</button>
   </nav>
 </div>

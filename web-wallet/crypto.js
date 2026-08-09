@@ -274,20 +274,28 @@ function derEncodeSignature(sig) {
   return concatBytes(new Uint8Array([0x30, rEnc.length + sEnc.length]), rEnc, sEnc);
 }
 
-// inputs: [{txid: Uint8Array(32, internal order), vout, valueSatoshis, pubkeyHash: Uint8Array(20)}]
+// inputs: [{txid: Uint8Array(32, internal order), vout, valueSatoshis, pubkeyHash: Uint8Array(20),
+//           privateKey?, publicKeyCompressed?}] -- an input's own privateKey/publicKeyCompressed
+// (needed once a wallet can spend UTXOs sitting at more than one derived
+// address in the same transaction) override the single global privateKey/
+// publicKeyCompressed arguments below, which stay as the default for
+// every input that doesn't specify its own -- existing single-key callers
+// are unaffected.
 // outputs: [{scriptPubKey: Uint8Array, valueSatoshis}]
 export function buildAndSignTransaction({ inputs, outputs, privateKey, publicKeyCompressed, locktime = 0 }) {
   if (inputs.length === 0) throw new Error("No inputs provided");
   const txInputs = inputs.map((u) => ({ prevTxid: u.txid, prevVout: u.vout, scriptSig: new Uint8Array(0) }));
   for (let i = 0; i < inputs.length; i++) {
+    const inputPrivateKey = inputs[i].privateKey ?? privateKey;
+    const inputPublicKey = inputs[i].publicKeyCompressed ?? publicKeyCompressed;
     const subscript = p2pkhScriptPubKey(inputs[i].pubkeyHash);
     const sighash = legacySighash({ inputs: txInputs, outputs, inputIndex: i, subscript, locktime });
-    const sig = secp.sign(sighash, privateKey);
+    const sig = secp.sign(sighash, inputPrivateKey);
     const derSig = derEncodeSignature(sig);
     const sigWithType = concatBytes(derSig, new Uint8Array([0x01]));
     txInputs[i].scriptSig = concatBytes(
       new Uint8Array([sigWithType.length]), sigWithType,
-      new Uint8Array([publicKeyCompressed.length]), publicKeyCompressed
+      new Uint8Array([inputPublicKey.length]), inputPublicKey
     );
   }
   return serializeTx(2, txInputs, outputs, locktime);

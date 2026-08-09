@@ -157,3 +157,75 @@ select option {
   justify-content: space-between;
   padding: 6px 0;
 }
+
+/* QR code (receive) */
+.qr-box {
+  display: flex;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* Modals (QR scan, tx detail) */
+.modal-overlay, .lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+.lock-overlay { z-index: 200; background: var(--bg); }
+.lock-overlay .card { width: 100%; max-width: 360px; }
+.modal-overlay .card { width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto; }
+
+.qr-scan-card video {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  margin: 8px 0;
+}
+.qr-scan-btn { flex: 0 0 auto; width: auto; padding: 12px 16px; margin-top: 0; }
+#screen-send .row:has(#btn-scan-qr) input { margin-bottom: 0; }
+
+.tx-detail-card .kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.tx-detail-card .kv-row:last-child { border-bottom: none; }
+.tx-detail-card .kv-row span:first-child { color: var(--text-dim); flex: 0 0 auto; }
+.tx-detail-card .kv-row span:last-child { text-align: right; word-break: break-all; }
+
+/* Address book / address list rows */
+.book-row, .addr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.book-row:last-child, .addr-row:last-child { border-bottom: none; }
+.book-row .book-info, .addr-row .addr-info { min-width: 0; flex: 1; }
+.book-row .book-label { color: var(--text); font-weight: 600; }
+.book-row .book-address, .addr-row { word-break: break-all; }
+.book-row button, .addr-row button {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.addr-row.current { color: var(--gold); }
+
+.tx-row { cursor: pointer; }
+.tx-row:hover { opacity: 0.8; }

@@ -1,4 +1,5 @@
 .claude/
+.DS_Store
 
 # Real key material -- never commit (see vps-gateway/README.md's Web
 # Push section for how to generate a real one per deployment)

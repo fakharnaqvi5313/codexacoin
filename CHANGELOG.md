@@ -1181,6 +1181,40 @@ above.
 
 ---
 
+## Added seven features to the web wallet
+
+### 2026-08-04
+
+- QR code on the receive screen; QR camera scanning on the send screen
+  (with a real error message, not a blank screen, if camera access
+  fails).
+- Session PIN lock -- real PBKDF2 + AES-GCM encryption of the recovery
+  phrase at rest via the Web Crypto API, not just a UI-level gate.
+- Multisig (N-of-M) UI built on top of `crypto.js`'s already-complete
+  but previously unexposed multisig primitives: create a shared
+  address, propose a spend, sign sequentially across cosigners,
+  finalize and broadcast.
+- Transaction detail view (tap a history row for a full breakdown).
+- Address book with labels, usable directly from the send screen.
+- Multiple addresses per wallet -- "New address" derives the next BIP44
+  index; balance/UTXOs/history combine across every address generated
+  on that browser. Explicitly not full gap-limit address discovery --
+  said so in-app.
+- Extended `buildAndSignTransaction` to support a different signing key
+  per input (needed once a send can span more than one address),
+  backward compatible with every existing single-key call site.
+- Found and fixed a real bug during testing: the Settings screen's
+  PIN success/error messages were being set then immediately cleared
+  by the same handler, never actually visible.
+- Verified end to end in a real browser, not just read for correctness
+  -- see `web-wallet/README.md`'s Verification section and
+  `PARAMETERS.md` section 20 for the full account, including design
+  decisions (why the PIN lock is real encryption, why multi-address
+  isn't gap-limit discovery, why multisig signs sequentially rather
+  than supporting parallel-copy merging).
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
