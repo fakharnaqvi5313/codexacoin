@@ -25,7 +25,16 @@ class WalletService extends ChangeNotifier {
   String? _stakeToken;
   bool loaded = false;
 
+  // Every BIP44 index this wallet has generated on this device for the
+  // current network -- not full gap-limit discovery, see activeAddress().
+  List<int> _addressIndices = [0];
+  int activeIndex = 0;
+  final Map<int, DerivedKey> _keys = {};
+  final Map<int, String> _addresses = {};
+
   bool get hasWallet => _mnemonic != null;
+
+  List<int> get addressIndices => List.unmodifiable(_addressIndices);
 
   /// Logged in to the custodial staking service's gateway account. This is
   /// entirely separate from [hasWallet]/the mnemonic -- it's an account on
@@ -38,7 +47,49 @@ class WalletService extends ChangeNotifier {
     _gateway = GatewayApi(network);
     _mnemonic = await _storage.readMnemonic();
     _stakeToken = await _storage.readStakeToken();
+    if (_mnemonic != null) await _deriveAllKnownAddresses();
     loaded = true;
+    notifyListeners();
+  }
+
+  Future<void> _deriveAllKnownAddresses() async {
+    _addressIndices = await _storage.readAddressIndices(_networkStorageName());
+    for (final idx in _addressIndices) {
+      await ensureKey(idx);
+    }
+    if (!_addressIndices.contains(activeIndex)) {
+      activeIndex = _addressIndices.last;
+    }
+  }
+
+  String _networkStorageName() => network.network == CacNetwork.testnet ? 'testnet' : 'mainnet';
+
+  Future<DerivedKey> ensureKey(int index) async {
+    final cached = _keys[index];
+    if (cached != null) return cached;
+    if (_mnemonic == null) throw StateError('No wallet loaded');
+    final key = deriveKey(mnemonic: _mnemonic!, network: network, index: index);
+    _keys[index] = key;
+    _addresses[index] = p2pkhAddress(hash160(key.publicKey), network);
+    return key;
+  }
+
+  /// Derives the next BIP44 index, adds it to this wallet's known set, and
+  /// makes it the active receive address. See activeAddress() for what
+  /// "known set" means (locally tracked, not gap-limit discovery).
+  Future<String> generateNewAddress() async {
+    final next = (_addressIndices.isEmpty ? -1 : _addressIndices.reduce((a, b) => a > b ? a : b)) + 1;
+    _addressIndices = [..._addressIndices, next];
+    await _storage.saveAddressIndices(_networkStorageName(), _addressIndices);
+    await ensureKey(next);
+    activeIndex = next;
+    notifyListeners();
+    return _addresses[next]!;
+  }
+
+  void setActiveIndex(int index) {
+    if (!_addressIndices.contains(index)) return;
+    activeIndex = index;
     notifyListeners();
   }
 
@@ -102,6 +153,12 @@ class WalletService extends ChangeNotifier {
     final mnemonic = generateMnemonic();
     await _storage.saveMnemonic(mnemonic);
     _mnemonic = mnemonic;
+    _addressIndices = [0];
+    activeIndex = 0;
+    _keys.clear();
+    _addresses.clear();
+    await _storage.saveAddressIndices(_networkStorageName(), _addressIndices);
+    await ensureKey(0);
     notifyListeners();
     return mnemonic;
   }
@@ -112,6 +169,12 @@ class WalletService extends ChangeNotifier {
     }
     await _storage.saveMnemonic(mnemonic);
     _mnemonic = mnemonic;
+    _addressIndices = [0];
+    activeIndex = 0;
+    _keys.clear();
+    _addresses.clear();
+    await _storage.saveAddressIndices(_networkStorageName(), _addressIndices);
+    await ensureKey(0);
     notifyListeners();
   }
 
@@ -119,57 +182,136 @@ class WalletService extends ChangeNotifier {
     network = NetworkConfig.forNetwork(n);
     _gateway = GatewayApi(network);
     await _storage.saveActiveNetwork(n == CacNetwork.testnet ? 'testnet' : 'mainnet');
+    _keys.clear();
+    _addresses.clear();
+    activeIndex = 0;
+    if (_mnemonic != null) await _deriveAllKnownAddresses();
     notifyListeners();
   }
 
-  /// The wallet's single active receive address (account 0, external
-  /// chain, index 0). A future revision should track a used-address set
-  /// and advance the index per BIP44 convention; this phase keeps it to
-  /// one address for simplicity, which is a real limitation worth calling
-  /// out rather than silently deviating from BIP44 without saying so.
+  /// The wallet's current active receive address. Not necessarily index 0
+  /// -- see [generateNewAddress] and the note there on what "known set"
+  /// means for this wallet (locally tracked generation, not full BIP44
+  /// gap-limit discovery: a phrase restored on a different device starts
+  /// back at index 0 and won't find addresses generated elsewhere).
   String activeAddress() {
+    final cached = _addresses[activeIndex];
+    if (cached != null) return cached;
     final key = _requireKey();
-    final hash = hash160(key.publicKey);
-    return p2pkhAddress(hash, network);
+    return p2pkhAddress(hash160(key.publicKey), network);
   }
 
-  /// The hash160 of this wallet's own active key -- the same value every
-  /// UTXO fetched for [activeAddress] pays to, since this wallet only
-  /// derives a single P2PKH address (see the note on [activeAddress]).
-  /// Computed locally rather than trusted from the gateway response: the
-  /// UTXO endpoint doesn't return a pubkey_hash field at all (it only
-  /// returns txid/vout/value/height/confirmations -- see
-  /// vps-gateway/app.py's address_utxos handler), so this is the only
-  /// correct source for it, not just a convenience.
+  String addressAt(int index) => _addresses[index] ?? (throw StateError('Address $index not derived yet'));
+
+  /// The hash160 of the active key -- computed locally rather than trusted
+  /// from the gateway response: the UTXO endpoint doesn't return a
+  /// pubkey_hash field at all (it only returns txid/vout/value/height/
+  /// confirmations -- see vps-gateway/app.py's address_utxos handler).
   Uint8List activePubkeyHash() {
     final key = _requireKey();
     return hash160(key.publicKey);
   }
 
   DerivedKey _requireKey() {
+    final cached = _keys[activeIndex];
+    if (cached != null) return cached;
     if (_mnemonic == null) {
       throw StateError('No wallet loaded');
     }
-    return deriveKey(mnemonic: _mnemonic!, network: network, index: 0);
+    return deriveKey(mnemonic: _mnemonic!, network: network, index: activeIndex);
   }
 
   GatewayApi get gateway => _gateway;
 
-  Future<Map<String, dynamic>> fetchBalance() => _gateway.balance(activeAddress());
+  /// Balance combined across every address this wallet has generated on
+  /// this device (see [generateNewAddress]), in the same {confirmed,
+  /// unconfirmed} shape a single-address balance call returns so
+  /// Balance.fromJson doesn't need to change.
+  Future<Map<String, dynamic>> fetchBalance() async {
+    var confirmed = BigInt.zero;
+    var unconfirmed = BigInt.zero;
+    for (final idx in _addressIndices) {
+      final json = await _gateway.balance(_addresses[idx]!);
+      confirmed += BigInt.parse(json['confirmed'] as String);
+      unconfirmed += BigInt.parse(json['unconfirmed'] as String);
+    }
+    return {'confirmed': confirmed.toString(), 'unconfirmed': unconfirmed.toString()};
+  }
 
-  Future<Map<String, dynamic>> fetchHistory() => _gateway.history(activeAddress());
+  /// Transaction history combined across every known address, deduped by
+  /// txid, most recent/pending first.
+  Future<Map<String, dynamic>> fetchHistory() async {
+    final seen = <String>{};
+    final all = <Map<String, dynamic>>[];
+    for (final idx in _addressIndices) {
+      final json = await _gateway.history(_addresses[idx]!);
+      final list = json['transactions'] as List<dynamic>? ?? const [];
+      for (final t in list) {
+        final m = t as Map<String, dynamic>;
+        final txid = m['txid'] as String;
+        if (seen.add(txid)) all.add(m);
+      }
+    }
+    all.sort((a, b) {
+      final ha = (a['height'] as int?) ?? 0;
+      final hb = (b['height'] as int?) ?? 0;
+      if (ha <= 0 && hb <= 0) return 0;
+      if (ha <= 0) return -1; // pending sorts first
+      if (hb <= 0) return 1;
+      return hb.compareTo(ha);
+    });
+    return {'transactions': all};
+  }
 
-  /// Builds, signs, and broadcasts a send. [utxos] must already be known
-  /// to belong to this wallet's active address (fetched via the gateway's
-  /// UTXO endpoint by the caller) -- this method does not itself query
-  /// anything beyond broadcasting the final signed transaction.
+  /// Fetches UTXOs across every known address, each tagged with the
+  /// signing key it actually belongs to, ready to hand straight to
+  /// sendTransaction. Reverses the gateway's display-order txid hex to
+  /// the internal/wire byte order buildAndSignTransaction needs -- Core's
+  /// listunspent (what vps-gateway's UTXO endpoint passes through) returns
+  /// txid in the conventional display order, which is byte-reversed from
+  /// how it belongs in a transaction's prevTxid field.
+  Future<List<tx.Utxo>> gatherAllUtxos() async {
+    final result = <tx.Utxo>[];
+    for (final idx in _addressIndices) {
+      final key = await ensureKey(idx);
+      final pubkeyHash = hash160(key.publicKey);
+      final resp = await _gateway.utxos(_addresses[idx]!);
+      final list = resp['utxos'] as List<dynamic>? ?? const [];
+      for (final u in list) {
+        final m = u as Map<String, dynamic>;
+        result.add(tx.Utxo(
+          txid: _hexToBytesReversed(m['txid'] as String),
+          vout: m['vout'] as int,
+          valueSatoshis: int.parse(m['value'].toString()),
+          pubkeyHash: pubkeyHash,
+          privateKey: key.privateKey,
+          publicKeyCompressed: key.publicKey,
+        ));
+      }
+    }
+    return result;
+  }
+
+  Uint8List _hexToBytesReversed(String hex) {
+    final bytes = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < bytes.length; i++) {
+      bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return Uint8List.fromList(bytes.reversed.toList());
+  }
+
+  /// Builds, signs, and broadcasts a send. [utxos] should come from
+  /// [gatherAllUtxos] (already tagged with each input's own signing key)
+  /// -- this method does not itself query anything beyond broadcasting
+  /// the final signed transaction. Change goes to the current active
+  /// address.
   Future<String> sendTransaction({
     required List<tx.Utxo> utxos,
     required String toAddress,
     required int amountSatoshis,
     required int feeSatoshis,
   }) async {
-    final key = _requireKey();
+    final changeKey = await ensureKey(activeIndex);
     final decoded = decodeAddress(toAddress, network);
     final Uint8List outScript;
     switch (decoded.type) {
@@ -189,19 +331,22 @@ class WalletService extends ChangeNotifier {
 
     final outputs = <tx.TxOutputSpec>[
       tx.TxOutputSpec(outScript, amountSatoshis),
-      if (change > 0) tx.TxOutputSpec(tx.p2pkhScriptPubKey(hash160(key.publicKey)), change),
+      if (change > 0) tx.TxOutputSpec(tx.p2pkhScriptPubKey(hash160(changeKey.publicKey)), change),
     ];
 
-    final rawTx = tx.buildAndSignTransaction(
-      inputs: utxos,
-      outputs: outputs,
-      privateKey: key.privateKey,
-      publicKeyCompressed: key.publicKey,
-    );
+    final rawTx = tx.buildAndSignTransaction(inputs: utxos, outputs: outputs);
 
     final hex = rawTx.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return _gateway.broadcast(hex);
   }
+
+  /// This wallet's multisig identity key, independent of whichever
+  /// address is "active" for receiving -- a cosigner set needs a stable
+  /// key, not one that changes every time the user taps "New address".
+  Future<DerivedKey> multisigKey() => ensureKey(0);
+
+  Future<List<Map<String, String>>> loadAddressBook() => _storage.readAddressBook();
+  Future<void> saveAddressBook(List<Map<String, String>> entries) => _storage.saveAddressBook(entries);
 
   /// Wipes the stored mnemonic. Irreversible -- the caller (UI layer)
   /// must have already confirmed this with the user via an explicit,
@@ -210,6 +355,10 @@ class WalletService extends ChangeNotifier {
     await _storage.wipeWallet();
     _mnemonic = null;
     _stakeToken = null;
+    _addressIndices = [0];
+    activeIndex = 0;
+    _keys.clear();
+    _addresses.clear();
     notifyListeners();
   }
 }

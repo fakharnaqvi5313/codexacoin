@@ -183,6 +183,71 @@ void main() {
     expect(verifier.verifySignature(expectedSighash, signature), isTrue);
   });
 
+  test('buildAndSignTransaction signs each input with its own key when '
+      'multiple different keys are used across inputs (multi-address send)', () {
+    final privateKeyA = _fixedPrivateKey();
+    final publicKeyA = _compress(_publicKeyFor(privateKeyA));
+    final privateKeyB = Uint8List.fromList(List<int>.generate(32, (i) => 32 - i));
+    final publicKeyB = _compress(_publicKeyFor(privateKeyB));
+    expect(publicKeyA, isNot(equals(publicKeyB)));
+
+    final utxoA = Utxo(
+      txid: Uint8List(32)..fillRange(0, 32, 0xaa),
+      vout: 0,
+      valueSatoshis: 100000000,
+      pubkeyHash: hash160(publicKeyA),
+      privateKey: privateKeyA,
+      publicKeyCompressed: publicKeyA,
+    );
+    final utxoB = Utxo(
+      txid: Uint8List(32)..fillRange(0, 32, 0xbb),
+      vout: 1,
+      valueSatoshis: 50000000,
+      pubkeyHash: hash160(publicKeyB),
+      privateKey: privateKeyB,
+      publicKeyCompressed: publicKeyB,
+    );
+    final outputs = [TxOutputSpec(p2pkhScriptPubKey(Uint8List(20)), 149990000)];
+
+    final rawTx = buildAndSignTransaction(inputs: [utxoA, utxoB], outputs: outputs);
+
+    // Walk the two scriptSigs out of the raw tx and confirm each pushes
+    // its OWN input's public key -- not, say, both pushing key A because
+    // a per-input override was silently ignored and a stale global key
+    // (which doesn't even exist here -- privateKey/publicKeyCompressed
+    // were deliberately omitted) leaked through instead.
+    var offset = 4; // version
+    offset += 1; // input count varint (2, single-byte)
+    for (final expectedPubkey in [publicKeyA, publicKeyB]) {
+      offset += 32 + 4; // prevTxid + vout
+      final scriptSigLen = rawTx[offset];
+      offset += 1;
+      final scriptSig = rawTx.sublist(offset, offset + scriptSigLen);
+      final sigLen = scriptSig[0];
+      final pubkeyLen = scriptSig[1 + sigLen];
+      final extractedPubkey = scriptSig.sublist(2 + sigLen, 2 + sigLen + pubkeyLen);
+      expect(extractedPubkey, expectedPubkey);
+      offset += scriptSigLen + 4; // scriptSig + sequence
+    }
+  });
+
+  test('buildAndSignTransaction throws if an input has no key at all '
+      '(neither its own nor a global fallback)', () {
+    final utxo = Utxo(
+      txid: Uint8List(32),
+      vout: 0,
+      valueSatoshis: 1,
+      pubkeyHash: Uint8List(20),
+    );
+    expect(
+      () => buildAndSignTransaction(
+        inputs: [utxo],
+        outputs: [TxOutputSpec(Uint8List(0), 1)],
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('throws on empty inputs', () {
     expect(
       () => buildAndSignTransaction(

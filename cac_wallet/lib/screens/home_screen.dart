@@ -10,6 +10,7 @@ import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
 import '../widgets/fiat_placeholder.dart';
 import 'history_screen.dart';
+import 'multisig_screen.dart';
 import 'receive_screen.dart';
 import 'send_screen.dart';
 import 'settings_screen.dart';
@@ -143,6 +144,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionButton(
+                    icon: Icons.groups_outlined,
+                    label: 'Multisig',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const MultisigScreen()),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: SizedBox()),
               ],
             ),
           ],

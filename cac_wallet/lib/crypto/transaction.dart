@@ -37,11 +37,20 @@ class Utxo {
   final int vout;
   final int valueSatoshis;
   final Uint8List pubkeyHash; // the 20-byte hash160 this UTXO pays to (must be P2PKH)
+  // Per-input signing key override -- needed once a wallet can spend UTXOs
+  // sitting at more than one derived address in the same transaction (the
+  // global privateKey/publicKeyCompressed args to buildAndSignTransaction
+  // only support one key for every input). Null falls back to those
+  // global args, so existing single-key callers are unaffected.
+  final Uint8List? privateKey;
+  final Uint8List? publicKeyCompressed;
   const Utxo({
     required this.txid,
     required this.vout,
     required this.valueSatoshis,
     required this.pubkeyHash,
+    this.privateKey,
+    this.publicKeyCompressed,
   });
 }
 
@@ -193,16 +202,16 @@ Uint8List _bigIntToBytes(BigInt v) {
   return bytes;
 }
 
-/// Build and sign a legacy P2PKH-input transaction. [inputs] must all be
-/// P2PKH UTXOs whose private key is [privateKeyFor] (single-key wallets
-/// only for this phase -- every input signed with the same key, matching
-/// how wallet_service.dart currently manages a single active address per
-/// account index rather than a full HD gap-limit scan).
+/// Build and sign a legacy P2PKH-input transaction. Every input must be
+/// signable with either its own [Utxo.privateKey]/[Utxo.publicKeyCompressed]
+/// (needed once a send can span more than one derived address) or the
+/// global [privateKey]/[publicKeyCompressed] args, used as the fallback
+/// for any input that doesn't specify its own.
 Uint8List buildAndSignTransaction({
   required List<Utxo> inputs,
   required List<TxOutputSpec> outputs,
-  required Uint8List privateKey,
-  required Uint8List publicKeyCompressed,
+  Uint8List? privateKey,
+  Uint8List? publicKeyCompressed,
   int locktime = 0,
 }) {
   if (inputs.isEmpty) {
@@ -212,13 +221,18 @@ Uint8List buildAndSignTransaction({
     for (final u in inputs) _TxInput(u.txid, u.vout, Uint8List(0)),
   ];
 
-  final signer = ECDSASigner(null, HMac(SHA256Digest(), 64));
   final domain = ECDomainParameters('secp256k1');
-  final d = _bytesToBigInt(privateKey);
-  final priv = ECPrivateKey(d, domain);
-  signer.init(true, PrivateKeyParameter(priv));
 
   for (var i = 0; i < inputs.length; i++) {
+    final inputPrivateKey = inputs[i].privateKey ?? privateKey;
+    final inputPublicKey = inputs[i].publicKeyCompressed ?? publicKeyCompressed;
+    if (inputPrivateKey == null || inputPublicKey == null) {
+      throw ArgumentError('Input $i has no signing key (neither its own nor a global fallback)');
+    }
+    final signer = ECDSASigner(null, HMac(SHA256Digest(), 64));
+    final priv = ECPrivateKey(_bytesToBigInt(inputPrivateKey), domain);
+    signer.init(true, PrivateKeyParameter(priv));
+
     final subscript = p2pkhScriptPubKey(inputs[i].pubkeyHash);
     final sighash = _legacySighash(
       inputs: txInputs,
@@ -233,7 +247,7 @@ Uint8List buildAndSignTransaction({
     // scriptSig: <sig+sighashtype> <pubkey>
     txInputs[i].scriptSig = Uint8List.fromList([
       sigWithType.length, ...sigWithType,
-      publicKeyCompressed.length, ...publicKeyCompressed,
+      inputPublicKey.length, ...inputPublicKey,
     ]);
   }
 

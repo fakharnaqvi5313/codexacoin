@@ -1221,6 +1221,41 @@ above.
 
 ---
 
+## Ported the web wallet's feature batch to the mobile app
+
+### 2026-08-04
+
+- Multisig UI (built directly on `crypto/transaction.dart`'s
+  already-complete but previously unexposed multisig primitives),
+  address book, transaction detail view, and multiple addresses per
+  wallet with combined balance/history/UTXOs -- same designs as the
+  web-wallet batch, translated to Flutter.
+- Extended `buildAndSignTransaction` for per-input signing keys, same
+  shape as the web-wallet change, backward compatible.
+- Found and fixed two more real, previously-undiscovered bugs while
+  reading the existing code: `send_screen.dart` never reversed a UTXO's
+  txid hex to wire byte order (every real send would have referenced
+  the wrong previous output and failed at broadcast), and
+  `TxSummary`/`TxDetail` force-cast a `height` field to non-nullable
+  `int` that the gateway genuinely returns as `null` for any pending
+  transaction (would have crashed the History screen on any
+  unconfirmed tx).
+- Verified via `flutter analyze` (clean) and the full test suite (26
+  tests, including a new targeted test for the per-input-key signing
+  change and the pre-existing full multisig round-trip test, both
+  passing). Live UI/simulator testing wasn't possible this time -- the
+  iOS Simulator tool was stuck in a genuine crash-restart loop for the
+  whole session, an environment issue, not a shortcut taken.
+- Push notifications not built: needs a Firebase project (Android/FCM)
+  and Apple Developer account (iOS/APNs), neither of which this session
+  has access to or can create. Left for the project owner.
+- Rebuilt and redeployed the release APK to
+  `codexacoin.com/downloads/CodexaCoin-android.apk`; `SHA256SUMS`/
+  `SHA256SUMS.asc` regenerated and re-signed. Full account, including
+  the bug diagnoses, in `PARAMETERS.md` section 21.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

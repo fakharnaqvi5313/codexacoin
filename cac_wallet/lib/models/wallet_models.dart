@@ -16,22 +16,30 @@ class Balance {
 
 class TxSummary {
   final String txid;
-  final int height;
+  // Null for a pending/unconfirmed transaction -- the gateway's history
+  // endpoint genuinely returns a JSON null here (see
+  // vps-gateway/app.py's address_history: height = t.get("blockheight"),
+  // which is None until the tx is mined), so this must stay nullable
+  // rather than force-cast to int.
+  final int? height;
   final int? fee;
   const TxSummary({required this.txid, required this.height, this.fee});
 
   factory TxSummary.fromJson(Map<String, dynamic> json) => TxSummary(
         txid: json['txid'] as String,
-        height: json['height'] as int,
+        height: json['height'] as int?,
         fee: json['fee'] as int?,
       );
 
-  bool get isPending => height <= 0;
+  bool get isPending => height == null || height! <= 0;
 }
 
 class TxDetail {
   final String txid;
-  final int height;
+  // Null for a pending transaction -- same reasoning as TxSummary.height
+  // (vps-gateway/app.py's tx_detail: height = None until a blockhash
+  // exists for it).
+  final int? height;
   final int confirmations;
   final bool isCoinstake;
   final BigInt? rewardSatoshis;
@@ -43,10 +51,12 @@ class TxDetail {
     this.rewardSatoshis,
   });
 
+  bool get isPending => height == null || height! <= 0;
+
   factory TxDetail.fromJson(Map<String, dynamic> json) => TxDetail(
         txid: json['txid'] as String,
-        height: json['height'] as int,
-        confirmations: json['confirmations'] as int,
+        height: json['height'] as int?,
+        confirmations: json['confirmations'] as int? ?? 0,
         isCoinstake: json['is_coinstake'] as bool? ?? false,
         rewardSatoshis: json['reward_satoshis'] != null
             ? BigInt.parse(json['reward_satoshis'] as String)

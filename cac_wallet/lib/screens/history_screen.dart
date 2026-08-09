@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
+import 'tx_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -81,6 +82,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                             subtitle: Text(t.isPending ? 'Pending' : 'Height ${t.height}'),
                             trailing: t.fee != null ? Text('fee ${t.fee}') : null,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => TxDetailScreen(txid: t.txid)),
+                            ),
                           );
                         },
                       ),

@@ -2197,3 +2197,112 @@ pubkey. All of this is local browser storage and read-only gateway
 calls -- no funds moved, no state changed on the actual CAC chain or
 gateway. `localStorage`/`sessionStorage` for that test session cleared
 immediately after, so no test wallet lingers in that browser profile.
+
+## 21. Ported the same feature batch to the mobile app (2026-08-04)
+
+Asked what else the mobile app (`cac_wallet/`) was missing compared to
+web-wallet's now-expanded feature set; surveyed it directly (screen list,
+grep for multisig/push/address-book code) rather than assuming. Findings:
+mobile already had QR generate+scan and a PIN/biometric lock (backed by
+native OS Keychain/Keystore, stronger than web's approach) -- ahead of
+where web started. It was missing multisig UI, address book, transaction
+detail, and multiple addresses, plus push notifications entirely (no
+Firebase/APNs integration at all). User said "build all of that for
+mobile too." Ported the four buildable ones directly; push notifications
+requires Firebase/Apple Developer credentials this session doesn't have
+-- see §21.4.
+
+### 21.1 Two more real, previously-undiscovered bugs found while reading
+
+Same pattern as the pubkey_hash crash found and fixed earlier this
+session (see the "Fix Android wallet send crash and QR scanning" entry
+in CHANGELOG.md): read the actual code path rather than assuming it
+worked because it shipped.
+
+- **`send_screen.dart`'s `_hexToBytes` never reversed the UTXO txid.**
+  Bitcoin-family txids are conventionally displayed byte-reversed from
+  their internal/wire serialization order -- `web-wallet/app.js` already
+  does this correctly (`cac.hexToBytes(u.txid).reverse()`, with a
+  comment explaining exactly why), but the mobile equivalent didn't
+  reverse at all. Every real mobile send would have referenced the
+  wrong previous-output hash, producing an invalid transaction the node
+  would reject at broadcast (not a crash, a silent-looking failure at
+  the worst possible step). Fixed by moving UTXO gathering into
+  `WalletService.gatherAllUtxos()` (now also handling multi-address
+  tagging) with the reversal applied, matching web-wallet's fix.
+- **`TxSummary.fromJson`/`TxDetail.fromJson` did `json['height'] as int`
+  (non-nullable) on a field the gateway genuinely returns as JSON
+  `null` for any pending/unconfirmed transaction** (confirmed in
+  `vps-gateway/app.py`: `history = t.get("blockheight")`, `None` until
+  mined; `tx_detail`'s `height = None` until a blockhash exists).
+  `TxSummary` is already used by the live History screen today --
+  any pending transaction in history would have crashed that screen
+  with a type-cast error. `TxDetail` was defined but never actually
+  consumed until this batch's transaction-detail screen. Fixed both:
+  `height` is now `int?`, with an `isPending` getter replacing the
+  unsafe comparison.
+
+### 21.2 What was ported, and how
+
+- **Address book, transaction detail, multiple addresses**: straight
+  translations of the web-wallet design (same storage shape, same
+  "locally-tracked generation, not gap-limit discovery" scoping for
+  multi-address, same combined balance/history/UTXOs across every known
+  index). Address book and address indices stored via
+  `WalletStorage`'s existing `flutter_secure_storage` instance (not
+  secret data, but avoids adding a second storage dependency for one
+  small list).
+- **Multisig UI**: built directly on `crypto/transaction.dart`'s
+  already-complete multisig primitives (confirmed via its own comment:
+  "Mirrors web-wallet/crypto.js's multisig functions exactly") --
+  almost entirely a UI translation, same as the pattern that made
+  web-wallet's multisig screen cheap to build. Sequential signing only,
+  same scope cut as web (`mergeMultisigProposals` exists but isn't
+  wired into the screen). Identity key is always index 0, same
+  reasoning as web: a cosigner set needs a stable key.
+- **`buildAndSignTransaction` extended for per-input keys**, same shape
+  as the web-wallet change: `Utxo` gained optional `privateKey`/
+  `publicKeyCompressed` fields overriding the (now-optional) global
+  args, backward compatible with every existing single-key call site.
+  Verified with a new test (not just re-reading the diff): two inputs,
+  two different keys, confirms each scriptSig pushes its own input's
+  correct public key -- see `test/crypto/transaction_test.dart`.
+
+### 21.3 Verification -- and its real limit this time
+
+`flutter analyze`: clean. `flutter test`: all 26 tests pass (24
+existing + 2 new), including the pre-existing `multisig_test.dart`'s
+full 2-of-3 create/sign/finalize/verify round trip -- confirms the
+`buildAndSignTransaction` signature change didn't regress the existing
+global-key call pattern. Added a targeted test for the new per-input-key
+capability specifically (two different keys, two inputs, each scriptSig
+checked against its own correct pubkey), matching this codebase's
+existing style of verifying against an independent ECDSA check rather
+than the signer's own self-consistency.
+
+**Not done this time**: live UI verification in a real simulator, unlike
+the thorough browser-driven testing done for the web-wallet batch. The
+iOS Simulator tool was stuck in a genuine crash-restart loop for the
+whole session (confirmed persistent across ~6 retries with increasing
+backoff, not a transient blip) -- an environment problem, not something
+fixable by waiting or retrying further. Said plainly rather than
+claiming equivalent verification to the web batch: this rests on clean
+static analysis, a full passing test suite, and careful manual reading,
+not on actually tapping through the new screens on a running app.
+
+### 21.4 Push notifications -- blocked on credentials this session doesn't have
+
+Real push delivery (notification arrives while the app is closed, the
+explicit target of "push notifications" as a feature) requires a
+platform push service: FCM for Android, APNs for iOS. There is no way
+around this that's consistent with the app's own "no background
+work/polling" architecture (see docs/store-compliance.md) -- that rule
+is exactly why push has to go through the OS's own delivery channel
+rather than the app checking in on a timer. Both require the project
+owner's own accounts (a Firebase project for FCM; an Apple Developer
+account for APNs certificates) that this session has no access to and
+can't create. Not attempted -- building client-side scaffolding against
+credentials that don't exist yet isn't verifiable and isn't real
+progress, just code that looks done. Left as the one item from the
+original "what's missing" list not carried out; the project owner would
+need to set up those accounts before this is something to build.

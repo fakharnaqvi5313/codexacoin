@@ -1,10 +1,9 @@
 /// Send flow: scan or paste a destination address, enter an amount, fetch
-/// this wallet's UTXOs from the gateway, sign locally, and broadcast.
-/// Signing happens entirely on-device (crypto/transaction.dart); the
-/// gateway only ever sees the final signed raw transaction hex.
+/// this wallet's UTXOs (across every address it's generated -- see
+/// WalletService.gatherAllUtxos) from the gateway, sign locally, and
+/// broadcast. Signing happens entirely on-device (crypto/transaction.dart);
+/// the gateway only ever sees the final signed raw transaction hex.
 library;
-
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -36,6 +35,23 @@ class _SendScreenState extends State<SendScreen> {
     }
   }
 
+  Future<void> _openAddressBook() async {
+    final wallet = context.read<WalletService>();
+    final entries = await wallet.loadAddressBook();
+    if (!mounted) return;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _AddressBookSheet(
+        entries: entries,
+        onSave: (updated) => wallet.saveAddressBook(updated),
+      ),
+    );
+    if (picked != null) {
+      setState(() => _addressController.text = picked);
+    }
+  }
+
   Future<void> _send() async {
     setState(() {
       _sending = true;
@@ -44,55 +60,53 @@ class _SendScreenState extends State<SendScreen> {
     });
     try {
       final wallet = context.read<WalletService>();
-      final address = wallet.activeAddress();
       final amountCac = double.tryParse(_amountController.text.trim());
       if (amountCac == null || amountCac <= 0) {
         throw ArgumentError('Enter a valid amount');
       }
       final amountSatoshis = (amountCac * 100000000).round();
 
-      final utxoJson = await wallet.gateway.utxos(address);
-      final utxoList = utxoJson['utxos'] as List<dynamic>? ?? const [];
-      if (utxoList.isEmpty) {
-        throw StateError('No spendable funds found for this address');
+      final allUtxos = await wallet.gatherAllUtxos();
+      if (allUtxos.isEmpty) {
+        throw StateError('No spendable funds found');
       }
-      // The UTXO endpoint doesn't return a pubkey_hash field -- every UTXO
-      // here pays to this wallet's own single active address anyway, so
-      // it's computed locally once rather than read from the response.
-      final myPubkeyHash = wallet.activePubkeyHash();
-      final utxos = utxoList.map((u) {
-        final m = u as Map<String, dynamic>;
-        return tx.Utxo(
-          txid: _hexToBytes(m['txid'] as String),
-          vout: m['vout'] as int,
-          valueSatoshis: int.parse(m['value'].toString()),
-          pubkeyHash: myPubkeyHash,
-        );
-      }).toList();
 
       final feeJson = await wallet.gateway.feeEstimate();
-      final feeSatoshis = int.tryParse(feeJson['fee_satoshis']?.toString() ?? '') ?? 1000;
+      final feeRate = int.tryParse(feeJson['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
+
+      var totalIn = 0;
+      final chosen = <tx.Utxo>[];
+      for (final u in allUtxos) {
+        chosen.add(u);
+        totalIn += u.valueSatoshis;
+        // Scaled by input count, not a fixed guess -- once a send can span
+        // more than one address's UTXOs a single-input estimate stops
+        // being reasonable. Still a rough estimate, not real dynamic fee
+        // estimation (this gateway has none -- see mobile-api.md section 4).
+        final estimatedVsize = 10 + chosen.length * 148 + 2 * 34;
+        final feeSatoshis = (feeRate * estimatedVsize) ~/ 1000;
+        if (totalIn >= amountSatoshis + feeSatoshis) break;
+      }
+      final finalVsize = 10 + chosen.length * 148 + 2 * 34;
+      final feeSatoshis = (feeRate * finalVsize) ~/ 1000;
+      if (totalIn < amountSatoshis + feeSatoshis) {
+        throw StateError('Insufficient funds: have $totalIn, need ${amountSatoshis + feeSatoshis}');
+      }
 
       final txid = await wallet.sendTransaction(
-        utxos: utxos,
+        utxos: chosen,
         toAddress: _addressController.text.trim(),
         amountSatoshis: amountSatoshis,
         feeSatoshis: feeSatoshis,
       );
       setState(() => _txid = txid);
+      _addressController.clear();
+      _amountController.clear();
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _sending = false);
     }
-  }
-
-  Uint8List _hexToBytes(String hex) {
-    final bytes = Uint8List(hex.length ~/ 2);
-    for (var i = 0; i < bytes.length; i++) {
-      bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return bytes;
   }
 
   @override
@@ -116,9 +130,20 @@ class _SendScreenState extends State<SendScreen> {
               decoration: InputDecoration(
                 labelText: 'Destination address',
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.qr_code_scanner),
-                  onPressed: _scanQr,
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.contacts_outlined),
+                      tooltip: 'Address book',
+                      onPressed: _openAddressBook,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.qr_code_scanner),
+                      tooltip: 'Scan QR',
+                      onPressed: _scanQr,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -183,6 +208,107 @@ class _QrScanScreen extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddressBookSheet extends StatefulWidget {
+  final List<Map<String, String>> entries;
+  final Future<void> Function(List<Map<String, String>>) onSave;
+  const _AddressBookSheet({required this.entries, required this.onSave});
+
+  @override
+  State<_AddressBookSheet> createState() => _AddressBookSheetState();
+}
+
+class _AddressBookSheetState extends State<_AddressBookSheet> {
+  late List<Map<String, String>> _entries;
+  final _labelController = TextEditingController();
+  final _addressController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = List.of(widget.entries);
+  }
+
+  Future<void> _add() async {
+    final label = _labelController.text.trim();
+    final address = _addressController.text.trim();
+    if (label.isEmpty || address.isEmpty) return;
+    setState(() => _entries = [..._entries, {'label': label, 'address': address}]);
+    await widget.onSave(_entries);
+    _labelController.clear();
+    _addressController.clear();
+  }
+
+  Future<void> _remove(int index) async {
+    setState(() => _entries = [..._entries]..removeAt(index));
+    await widget.onSave(_entries);
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16, right: 16, top: 16,
+        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Address book', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_entries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No saved addresses yet.'),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 260),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _entries.length,
+                  itemBuilder: (context, i) {
+                    final e = _entries[i];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(e['label'] ?? ''),
+                      subtitle: Text(e['address'] ?? '', style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                      onTap: () => Navigator.of(context).pop(e['address']),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _remove(i),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const Divider(),
+            TextField(
+              controller: _labelController,
+              decoration: const InputDecoration(labelText: 'Label'),
+            ),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(labelText: 'Address'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(onPressed: _add, child: const Text('Save address')),
+          ],
         ),
       ),
     );
