@@ -2,6 +2,7 @@ import * as cac from "./crypto.js";
 import { Gateway, GatewayError } from "./gateway.js";
 import * as qr from "./qr.js";
 import * as storage from "./storage.js";
+import { fetchCacUsdPrice } from "./price.js";
 
 // Production default: empty string, so Gateway's fetch(this.baseUrl + path)
 // calls resolve against the page's own origin (see explorer/app.js and
@@ -33,6 +34,23 @@ refreshGateway();
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Parses a `codexacoin:<address>[?amount=X&label=Y]` URI (BIP21-style).
+// Returns just the address unchanged if given a bare address instead of
+// a URI, so callers can pass either through this same function.
+function parseBip21(text) {
+  const trimmed = text.trim();
+  if (!trimmed.toLowerCase().startsWith("codexacoin:")) return { address: trimmed, amount: null };
+  const withoutScheme = trimmed.slice("codexacoin:".length);
+  const [address, query] = withoutScheme.split("?");
+  let amount = null;
+  if (query) {
+    const params = new URLSearchParams(query);
+    const amountStr = params.get("amount");
+    if (amountStr) amount = parseFloat(amountStr);
+  }
+  return { address, amount };
 }
 
 function formatCac(satoshis) {
@@ -105,6 +123,7 @@ function showScreen(name) {
   if (name === "history") loadHistory();
   if (name === "staking") loadStaking();
   if (name === "multisig") loadMultisig();
+  if (name === "watch") loadWatch();
   if (name === "settings") loadSettings();
 }
 
@@ -206,9 +225,23 @@ async function loadHome() {
       total += BigInt(balance.confirmed) + BigInt(balance.unconfirmed);
     }
     document.getElementById("home-balance").textContent = `${formatCac(total)} CAC`;
+    loadFiatValue(total);
   } catch (e) {
     errEl.textContent = e instanceof GatewayError ? e.message : `Could not reach the network: ${e}`;
   }
+}
+
+// Best-effort only -- see price.js for exactly how thin the data behind
+// this is. Silently shows nothing rather than a stale/wrong number if
+// either source is unreachable.
+async function loadFiatValue(totalSatoshis) {
+  const el = document.getElementById("home-fiat-value");
+  el.textContent = "";
+  const price = await fetchCacUsdPrice();
+  if (!price) return;
+  const cacAmount = Number(formatCac(totalSatoshis));
+  const usdValue = cacAmount * price.usdPerCac;
+  el.textContent = `~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- based on thin Stellar DEX liquidity, not a reliable market price)`;
 }
 
 // -------------------------------------------------------------------- send
@@ -287,7 +320,10 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
 
 // ------------------------------------------------------------- QR scanning
 
-document.getElementById("btn-scan-qr").addEventListener("click", () => {
+// Shared by the send screen's address scanner and the multisig screen's
+// proposal scanner -- same camera overlay, different destination for the
+// decoded text.
+function openQrScanner(onResult) {
   document.getElementById("qr-scan-overlay").style.display = "flex";
   document.getElementById("qr-scan-error").textContent = "";
   const video = document.getElementById("qr-video");
@@ -296,13 +332,20 @@ document.getElementById("btn-scan-qr").addEventListener("click", () => {
     video,
     canvas,
     onResult: (text) => {
-      document.getElementById("send-address").value = text;
+      onResult(text);
       closeQrScan();
     },
     onError: () => {
       document.getElementById("qr-scan-error").textContent =
         "Could not access the camera. Check that this site has camera permission in your browser settings.";
     },
+  });
+}
+document.getElementById("btn-scan-qr").addEventListener("click", () => {
+  openQrScanner((text) => {
+    const { address, amount } = parseBip21(text);
+    document.getElementById("send-address").value = address;
+    if (amount != null) document.getElementById("send-amount").value = amount;
   });
 });
 function closeQrScan() {
@@ -312,6 +355,16 @@ function closeQrScan() {
   document.getElementById("qr-video").srcObject = null;
 }
 document.getElementById("btn-qr-scan-cancel").addEventListener("click", closeQrScan);
+
+// Also handles a pasted codexacoin: URI (not just a scanned one) -- same
+// parseBip21 either way.
+document.getElementById("send-address").addEventListener("change", (e) => {
+  const { address, amount } = parseBip21(e.target.value);
+  if (address !== e.target.value) {
+    e.target.value = address;
+    if (amount != null) document.getElementById("send-amount").value = amount;
+  }
+});
 
 // -------------------------------------------------------------- address book
 
@@ -376,9 +429,24 @@ document.getElementById("btn-book-add").addEventListener("click", () => {
 
 async function loadReceive() {
   document.getElementById("receive-address").textContent = activeAddress();
-  await qr.renderQr(document.getElementById("receive-qr"), activeAddress());
+  document.getElementById("receive-request-amount").value = "";
+  await refreshReceiveQr();
   renderAddressList();
 }
+// BIP21-style URI (codexacoin:<address>[?amount=X]) so a requested amount
+// travels with the QR itself rather than needing to be communicated
+// separately -- falls back to a bare address when no amount is set, same
+// as before this feature existed.
+async function refreshReceiveQr() {
+  const amount = document.getElementById("receive-request-amount").value.trim();
+  const amountNum = parseFloat(amount);
+  const uri = amountNum > 0 ? `codexacoin:${activeAddress()}?amount=${amountNum}` : activeAddress();
+  await qr.renderQr(document.getElementById("receive-qr"), uri);
+}
+document.getElementById("receive-request-amount").addEventListener("input", refreshReceiveQr);
+document.getElementById("btn-view-on-explorer").addEventListener("click", () => {
+  window.open(`https://codexacoin.com/blockexplorer/#/address/${activeAddress()}`, "_blank", "noopener");
+});
 function renderAddressList() {
   const listEl = document.getElementById("address-list");
   listEl.innerHTML = state.addressIndices
@@ -425,11 +493,12 @@ async function loadHistory() {
         allTxs.push(t);
       }
     }
+    allTxs.sort((a, b) => (b.height ?? Infinity) - (a.height ?? Infinity));
+    state._lastHistory = allTxs;
     if (allTxs.length === 0) {
       listEl.innerHTML = '<p class="notice">No transactions yet.</p>';
       return;
     }
-    allTxs.sort((a, b) => (b.height ?? Infinity) - (a.height ?? Infinity));
     listEl.innerHTML = allTxs
       .map(
         (t) =>
@@ -444,8 +513,33 @@ async function loadHistory() {
   }
 }
 
+// Exports the summary fields already on screen (txid, height/status, fee)
+// -- not the full detail (inputs/outputs) for every transaction, which
+// would mean one extra gateway call per row. A reasonable scope cut for
+// what a CSV export is normally used for (a quick record, not a full
+// audit trail).
+document.getElementById("btn-export-csv").addEventListener("click", () => {
+  const txs = state._lastHistory || [];
+  if (txs.length === 0) return;
+  const rows = [["txid", "status", "height", "fee_satoshis"]];
+  for (const t of txs) {
+    rows.push([t.txid, t.height && t.height > 0 ? "confirmed" : "pending", t.height ?? "", t.fee ?? ""]);
+  }
+  const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `codexacoin-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
 async function openTxDetail(txid) {
   document.getElementById("tx-detail-overlay").style.display = "flex";
+  document.getElementById("btn-tx-detail-explorer").onclick = () => {
+    window.open(`https://codexacoin.com/blockexplorer/#/tx/${txid}`, "_blank", "noopener");
+  };
   const bodyEl = document.getElementById("tx-detail-body");
   bodyEl.innerHTML = '<p class="notice">Loading...</p>';
   try {
@@ -777,6 +871,107 @@ document.getElementById("btn-ms-broadcast").addEventListener("click", async () =
   } catch (e) {
     errEl.textContent = e instanceof GatewayError ? e.message : String(e.message || e);
   }
+});
+
+// QR is a convenience for handing a proposal to another device -- not a
+// replacement for the JSON textarea, which still works for anything a
+// QR can't hold. ~1500 chars is a conservative cutoff for reliable
+// scanning at a reasonable QR size/zoom, well under the encoder's own
+// hard limit -- a multi-signature proposal with several inputs can
+// exceed it, so this fails closed with a clear message rather than
+// silently producing an unscannable QR.
+const MS_QR_MAX_CHARS = 1500;
+document.getElementById("btn-ms-show-qr").addEventListener("click", async () => {
+  const errEl = document.getElementById("ms-qr-error");
+  errEl.textContent = "";
+  const json = document.getElementById("ms-proposal-json").value.trim();
+  if (!json) {
+    errEl.textContent = "Nothing to show -- paste or create a proposal first.";
+    return;
+  }
+  if (json.length > MS_QR_MAX_CHARS) {
+    errEl.textContent = `This proposal is too large for a reliable QR code (${json.length} characters). Share the JSON text directly instead.`;
+    return;
+  }
+  document.getElementById("ms-qr-overlay").style.display = "flex";
+  await qr.renderQr(document.getElementById("ms-qr-canvas"), json);
+});
+document.getElementById("btn-ms-qr-close").addEventListener("click", () => {
+  document.getElementById("ms-qr-overlay").style.display = "none";
+});
+document.getElementById("btn-ms-scan-qr").addEventListener("click", () => {
+  openQrScanner((text) => {
+    document.getElementById("ms-proposal-json").value = text;
+  });
+});
+
+// ------------------------------------------------------------- watch-only
+
+function loadWatchList() {
+  const raw = localStorage.getItem("cac_watch_list");
+  return raw ? JSON.parse(raw) : [];
+}
+function saveWatchList(entries) {
+  localStorage.setItem("cac_watch_list", JSON.stringify(entries));
+}
+
+async function loadWatch() {
+  const entries = loadWatchList();
+  const listEl = document.getElementById("watch-list");
+  if (entries.length === 0) {
+    listEl.innerHTML = '<p class="notice">No watched addresses yet.</p>';
+    return;
+  }
+  listEl.innerHTML = entries
+    .map(
+      (e, i) => `
+    <div class="book-row">
+      <div class="book-info">
+        <div class="book-label">${escapeHtml(e.label)}</div>
+        <div class="book-address mono">${escapeHtml(e.address)}</div>
+        <div class="notice small" id="watch-balance-${i}">Loading balance...</div>
+      </div>
+      <button class="secondary" type="button" data-explorer="${i}">Explorer</button>
+      <button class="danger" type="button" data-remove="${i}">Remove</button>
+    </div>`
+    )
+    .join("");
+  listEl.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.remove);
+      const updated = loadWatchList();
+      updated.splice(idx, 1);
+      saveWatchList(updated);
+      loadWatch();
+    });
+  });
+  listEl.querySelectorAll("[data-explorer]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const address = entries[Number(btn.dataset.explorer)].address;
+      window.open(`https://codexacoin.com/blockexplorer/#/address/${address}`, "_blank", "noopener");
+    });
+  });
+  entries.forEach(async (e, i) => {
+    const el = document.getElementById(`watch-balance-${i}`);
+    try {
+      const balance = await state.gateway.balance(e.address);
+      const total = BigInt(balance.confirmed) + BigInt(balance.unconfirmed);
+      el.textContent = `${formatCac(total)} CAC`;
+    } catch (err) {
+      el.textContent = "Could not fetch balance";
+    }
+  });
+}
+document.getElementById("btn-watch-add").addEventListener("click", () => {
+  const label = document.getElementById("watch-label").value.trim();
+  const address = document.getElementById("watch-address").value.trim();
+  if (!label || !address) return;
+  const entries = loadWatchList();
+  entries.push({ label, address });
+  saveWatchList(entries);
+  document.getElementById("watch-label").value = "";
+  document.getElementById("watch-address").value = "";
+  loadWatch();
 });
 
 // ---------------------------------------------------------------- settings

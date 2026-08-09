@@ -15,6 +15,7 @@ import 'receive_screen.dart';
 import 'send_screen.dart';
 import 'settings_screen.dart';
 import 'staking_screen.dart';
+import 'watch_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -89,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
-                        const FiatPlaceholder(),
+                        FiatPlaceholder(cacAmount: (_balance?.total ?? BigInt.zero).toDouble() / 1e8),
                       ],
                     ),
             ),
@@ -159,7 +160,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: SizedBox()),
+                Expanded(
+                  child: _ActionButton(
+                    icon: Icons.visibility_outlined,
+                    label: 'Watch',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const WatchScreen()),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],

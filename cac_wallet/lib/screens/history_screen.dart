@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
@@ -40,10 +41,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  // Exports the summary fields already on screen (txid, status, height,
+  // fee) -- not the full detail (inputs/outputs) for every transaction,
+  // which would mean one extra gateway call per row. A reasonable scope
+  // cut for what a CSV export is normally used for.
+  Future<void> _exportCsv() async {
+    final txs = _txs;
+    if (txs == null || txs.isEmpty) return;
+    final buffer = StringBuffer('txid,status,height,fee_satoshis\n');
+    for (final t in txs) {
+      final status = t.isPending ? 'pending' : 'confirmed';
+      buffer.writeln('"${t.txid}","$status","${t.height ?? ''}","${t.fee ?? ''}"');
+    }
+    await Share.share(buffer.toString(), subject: 'CodexaCoin transaction history');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('History')),
+      appBar: AppBar(
+        title: const Text('History'),
+        actions: [
+          IconButton(icon: const Icon(Icons.ios_share), tooltip: 'Export as CSV', onPressed: _exportCsv),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: _error != null

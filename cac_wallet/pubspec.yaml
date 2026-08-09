@@ -47,6 +47,12 @@ dependencies:
   # -- Networking (gateway API, see docs/mobile-api.md) --
   http: ^1.2.2
 
+  # -- Opening the block explorer / other external links --
+  url_launcher: ^6.3.0
+
+  # -- Sharing exported CSV history via the OS share sheet --
+  share_plus: ^9.0.0 # pinned below 10.0.1's Dart >=3.4.0 bump; this SDK is Dart 3.3.4
+
   # -- State management (kept deliberately simple for this phase) --
   provider: ^6.1.2
 

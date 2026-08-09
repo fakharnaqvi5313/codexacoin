@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
@@ -42,10 +43,20 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     }
   }
 
+  Future<void> _viewOnExplorer() async {
+    final uri = Uri.parse('https://codexacoin.com/blockexplorer/#/tx/${widget.txid}');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Transaction')),
+      appBar: AppBar(
+        title: const Text('Transaction'),
+        actions: [
+          IconButton(icon: const Icon(Icons.open_in_new), tooltip: 'View on explorer', onPressed: _viewOnExplorer),
+        ],
+      ),
       body: _error != null
           ? Padding(
               padding: const EdgeInsets.all(24),

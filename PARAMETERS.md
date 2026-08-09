@@ -2306,3 +2306,102 @@ credentials that don't exist yet isn't verifiable and isn't real
 progress, just code that looks done. Left as the one item from the
 original "what's missing" list not carried out; the project owner would
 need to set up those accounts before this is something to build.
+
+## 22. Third feature round: price, BIP21, explorer links, CSV export,
+watch-only, QR multisig sharing (2026-08-09)
+
+Asked a third time what else could be added to both apps. Proposed six
+items this time (no multisig/address-book/tx-detail gaps left after
+§20-21): live fiat price estimate, BIP21 URI support so a QR/paste
+carries both address and requested amount, one-tap block explorer
+links, CSV export of transaction history, watch-only address
+monitoring, and QR-based multisig proposal sharing (paper/photo
+hand-off instead of copy-pasting a JSON blob). User said "build all"
+both times it was raised in this round. Built web-wallet first, tested
+each feature live in-browser, then ported to `cac_wallet/`.
+
+### 22.1 Fiat price is intentionally caveated, not a real market price
+
+`fetchCacUsdPrice()` (`web-wallet/price.js`, `cac_wallet/lib/services/
+price_service.dart`) chains two real API calls: the last executed trade
+price for CAC/XLM on the Stellar DEX (Horizon's `/trades` endpoint,
+queried by asset pair, not tied to any specific account) times XLM/USD
+from CoinGecko's public `simple/price` endpoint. This is genuinely live
+data, not a hardcoded number, but it rests on whatever the Stellar DEX's
+thin CAC/XLM order book last traded at -- not a reliable market price
+the way an exchange-aggregated price would be. Both UIs say so directly
+("estimated -- thin Stellar DEX liquidity, not a reliable market
+price") rather than presenting it as authoritative, matching this
+project's standing rule against overstating what a number actually
+means (see the wash-trade disclosure on the Stellar DEX page for the
+same principle applied to trading activity itself).
+
+### 22.2 BIP21 turns the QR/paste flow bidirectional
+
+Previously a QR code only ever encoded a bare address; a pasted address
+could only ever be a bare address. `parseBip21`/`buildBip21Uri` (mirror
+implementations, `web-wallet/app.js` and `cac_wallet/lib/services/
+bip21.dart`) add the standard `codexacoin:<address>?amount=X` scheme in
+both directions: the receive screen's QR now encodes a requested amount
+when one is entered, and the send screen recognizes a scanned or pasted
+BIP21 URI (not just a bare address) and splits it into address + amount
+fields automatically. Falls back to treating the input as a bare
+address when it doesn't parse as BIP21, so nothing about the existing
+bare-address flow changed.
+
+### 22.3 QR multisig sharing has a real, disclosed size ceiling
+
+A multisig proposal is a JSON blob (transaction skeleton + partial
+signatures) that grows with every additional signer and input --
+unlike an address, it isn't guaranteed to fit in a scannable QR code.
+Both platforms use the same `1500`-character cutoff (`MS_QR_MAX_CHARS`
+in `app.js`, `_msQrMaxChars` in `multisig_screen.dart`) and fail
+closed with a clear message ("proposal too large for a QR code, use
+copy/paste instead") rather than silently generating a QR dense enough
+to be unscannable. The existing copy/paste proposal flow is unaffected
+and remains the fallback for anything over that size.
+
+### 22.4 Watch-only is deliberately separate from the address book
+
+The address book (§20/§21) exists to speed up the send flow by
+labelling addresses you send *to*. Watch-only is a different feature:
+monitoring the balance of an address you don't hold keys for --
+someone else's address, or one of yours from a different wallet/device.
+Kept as a separate list (`cac_watch_list` in web `localStorage`, a
+`_watchListKey` entry in mobile's secure storage, both wiped by the
+existing wipe-wallet flow) rather than merged into the address book, so
+the send screen's autocomplete doesn't get cluttered with addresses
+that were only ever added to watch, never to send to.
+
+### 22.5 Web-wallet verified live in-browser, not just read
+
+Every one of the six features was exercised against a running instance
+via `preview_start`/`javascript_tool`, not just read for correctness:
+real price fetch returned a genuine value (`{"usdPerCac":0.0109042,
+"tradeTime":"2026-08-03T13:46:08Z"}`); a BIP21 QR encode -> decode round
+trip matched exactly; pasting a BIP21 URI into the send address field
+correctly populated both fields; adding a watch address persisted
+across a reload and correctly showed "Could not fetch balance" against
+no local gateway (the honest failure path, not a silent zero); the
+multisig "Show as QR" -> scan/decode round trip matched exactly (433
+chars) and a 2000-character oversized proposal was correctly rejected
+*before* the QR overlay opened; CSV export's quote-escaping was checked
+against an embedded-quote test case; both explorer-link buttons
+(receive screen, transaction detail modal) were checked against a
+mocked `fetch`/`window.open` to confirm the exact target URL.
+
+### 22.6 Mobile: same features, static verification only
+
+`flutter analyze`: clean, no issues. `flutter test`: 26 tests pass (all
+pre-existing crypto/multisig/keys tests unaffected; the gateway
+integration tests correctly skip -- "No live gateway configured" -- 
+rather than silently passing or failing, since none of this batch's
+features are gateway-shaped enough to need a new integration test of
+their own). As with §21.3, live simulator verification wasn't possible
+this session -- the iOS Simulator tool's crash-restart issue is a
+standing environment limitation, not re-attempted here since nothing
+changed about it. This batch is a closer translation of already-tested
+web-wallet code than §21 was (all six features reuse the same parsing/
+formatting logic, just swapped from JS to Dart), which narrows the risk
+somewhat, but is not a substitute for actually tapping through the new
+screens.

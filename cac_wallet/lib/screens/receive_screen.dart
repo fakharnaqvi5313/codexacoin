@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../services/bip21.dart';
 import '../services/wallet_service.dart';
 
 class ReceiveScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class ReceiveScreen extends StatefulWidget {
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _generating = false;
+  final _requestAmountController = TextEditingController();
 
   Future<void> _newAddress() async {
     setState(() => _generating = true);
@@ -30,10 +33,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     }
   }
 
+  Future<void> _viewOnExplorer(String address) async {
+    final uri = Uri.parse('https://codexacoin.com/blockexplorer/#/address/$address');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  void dispose() {
+    _requestAmountController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletService>();
     final address = wallet.activeAddress();
+    final requestAmount = double.tryParse(_requestAmountController.text.trim());
+    final qrData = buildBip21Uri(address, amount: requestAmount);
     return Scaffold(
       appBar: AppBar(title: const Text('Receive')),
       body: ListView(
@@ -46,7 +62,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: QrImageView(
-              data: address,
+              data: qrData,
               version: QrVersions.auto,
               size: 240,
             ),
@@ -58,15 +74,39 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             style: const TextStyle(fontSize: 16, fontFamily: 'monospace'),
           ),
           const SizedBox(height: 16),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.copy),
-            label: const Text('Copy address'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: address));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Address copied')),
-              );
-            },
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copy'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: address));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Address copied')),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Explorer'),
+                  onPressed: () => _viewOnExplorer(address),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _requestAmountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Request a specific amount (optional)',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 32),
           Text('Previously used addresses', style: Theme.of(context).textTheme.titleSmall),

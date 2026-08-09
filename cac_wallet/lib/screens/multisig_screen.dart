@@ -15,10 +15,19 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../crypto/address.dart';
 import '../crypto/transaction.dart' as tx;
 import '../services/wallet_service.dart';
+import 'qr_scan_screen.dart';
+
+// ~1500 chars is a conservative cutoff for reliable scanning at a
+// reasonable QR size/zoom, well under the encoder's own hard limit -- a
+// multisig proposal with several inputs can exceed it, so this fails
+// closed with a clear message rather than silently producing an
+// unscannable QR. Matches web-wallet's identical cutoff.
+const _msQrMaxChars = 1500;
 
 String _bytesToHex(Uint8List b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 Uint8List _hexToBytes(String hex) {
@@ -194,6 +203,43 @@ class _MultisigScreenState extends State<MultisigScreen> {
     }
   }
 
+  Future<void> _showProposalQr() async {
+    final json = _proposalJsonController.text.trim();
+    if (json.isEmpty) return;
+    if (json.length > _msQrMaxChars) {
+      setState(() => _signError =
+          'This proposal is too large for a reliable QR code (${json.length} characters). Share the JSON text directly instead.');
+      return;
+    }
+    setState(() => _signError = null);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Scan this on another device'),
+        content: SizedBox(
+          width: 260,
+          height: 260,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(12),
+            child: QrImageView(data: json, version: QrVersions.auto),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Future<void> _scanProposalQr() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScanScreen(title: 'Scan proposal')),
+    );
+    if (result != null) {
+      setState(() => _proposalJsonController.text = result);
+    }
+  }
+
   Future<void> _finalizeAndBroadcast() async {
     setState(() {
       _signError = null;
@@ -303,6 +349,14 @@ class _MultisigScreenState extends State<MultisigScreen> {
             maxLines: 8,
             style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
             decoration: const InputDecoration(labelText: 'Proposal JSON (paste one)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: OutlinedButton(onPressed: _showProposalQr, child: const Text('Show as QR'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton(onPressed: _scanProposalQr, child: const Text('Scan QR'))),
+            ],
           ),
           const SizedBox(height: 8),
           Row(

@@ -6,11 +6,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 
 import '../crypto/transaction.dart' as tx;
+import '../services/bip21.dart';
 import '../services/wallet_service.dart';
+import 'qr_scan_screen.dart';
 
 class SendScreen extends StatefulWidget {
   const SendScreen({super.key});
@@ -28,10 +29,22 @@ class _SendScreenState extends State<SendScreen> {
 
   Future<void> _scanQr() async {
     final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const _QrScanScreen()),
+      MaterialPageRoute(builder: (_) => const QrScanScreen(title: 'Scan address')),
     );
     if (result != null) {
-      setState(() => _addressController.text = result);
+      final parsed = parseBip21(result);
+      setState(() {
+        _addressController.text = parsed.address;
+        if (parsed.amount != null) _amountController.text = parsed.amount.toString();
+      });
+    }
+  }
+
+  void _onAddressChanged(String value) {
+    final parsed = parseBip21(value);
+    if (parsed.address != value) {
+      _addressController.text = parsed.address;
+      if (parsed.amount != null) _amountController.text = parsed.amount.toString();
     }
   }
 
@@ -127,6 +140,7 @@ class _SendScreenState extends State<SendScreen> {
           children: [
             TextField(
               controller: _addressController,
+              onChanged: _onAddressChanged,
               decoration: InputDecoration(
                 labelText: 'Destination address',
                 border: const OutlineInputBorder(),
@@ -178,36 +192,6 @@ class _SendScreenState extends State<SendScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QrScanScreen extends StatelessWidget {
-  const _QrScanScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Scan address')),
-      body: MobileScanner(
-        onDetect: (capture) {
-          final barcodes = capture.barcodes;
-          if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-            Navigator.of(context).pop(barcodes.first.rawValue);
-          }
-        },
-        errorBuilder: (context, error, child) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Could not access the camera: ${error.errorCode.name}. '
-              'Check that camera access is allowed for this app in your '
-              'device settings.',
-              textAlign: TextAlign.center,
-            ),
-          ),
         ),
       ),
     );

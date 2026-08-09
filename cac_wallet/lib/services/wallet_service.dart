@@ -348,6 +348,9 @@ class WalletService extends ChangeNotifier {
   Future<List<Map<String, String>>> loadAddressBook() => _storage.readAddressBook();
   Future<void> saveAddressBook(List<Map<String, String>> entries) => _storage.saveAddressBook(entries);
 
+  Future<List<Map<String, String>>> loadWatchList() => _storage.readWatchList();
+  Future<void> saveWatchList(List<Map<String, String>> entries) => _storage.saveWatchList(entries);
+
   /// Wipes the stored mnemonic. Irreversible -- the caller (UI layer)
   /// must have already confirmed this with the user via an explicit,
   /// unambiguous confirmation step before calling this.

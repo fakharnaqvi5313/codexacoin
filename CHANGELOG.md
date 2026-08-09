@@ -1256,6 +1256,44 @@ above.
 
 ---
 
+## Added price, BIP21, explorer links, CSV export, watch-only, and QR
+multisig sharing to both wallets
+
+### 2026-08-09
+
+- Live CAC/USD price estimate (Stellar DEX last-trade price x CoinGecko
+  XLM/USD), clearly labelled as an estimate resting on thin DEX
+  liquidity, not a reliable market price.
+- BIP21 URI support (`codexacoin:<address>?amount=X`): the receive
+  screen's QR now carries a requested amount when one is entered, and
+  the send screen auto-splits a scanned or pasted BIP21 URI into
+  address + amount. Falls back to plain-address behavior when the
+  input isn't a BIP21 URI.
+- One-tap block explorer links from the receive screen and transaction
+  detail view/screen.
+- CSV export of transaction history (web: browser download; mobile:
+  native share sheet via `share_plus`).
+- Watch-only address monitoring -- track any address's balance without
+  holding its keys, kept as its own list separate from the address
+  book (which is for addresses you send *to*, not monitor).
+- QR-based multisig proposal sharing as an alternative to copy/paste,
+  with a disclosed 1500-character size ceiling (same constant on both
+  platforms) that fails closed with a clear message rather than
+  generating an unscannable QR.
+- Web-wallet verified live in-browser for all six features (real price
+  fetch, BIP21 round trip, watch-only persistence, multisig QR round
+  trip and oversized-proposal rejection, CSV escaping, explorer-link
+  URLs). Mobile verified via `flutter analyze` (clean) and the full
+  test suite (26 tests passing); live simulator testing wasn't possible
+  this session, same standing iOS Simulator environment issue noted in
+  the previous entry. Full account in `PARAMETERS.md` section 22.
+- Rebuilt and redeployed the release APK to
+  `codexacoin.com/downloads/CodexaCoin-android.apk`; `SHA256SUMS`/
+  `SHA256SUMS.asc` regenerated and re-signed. Web wallet redeployed to
+  `codexacoin.com/wallet/`.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

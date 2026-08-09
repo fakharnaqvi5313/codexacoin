@@ -18,6 +18,7 @@ class WalletStorage {
   static const _stakeTokenKey = 'cac_wallet_stake_token_v1';
   static const _addressIndicesKeyPrefix = 'cac_wallet_address_indices_v1_';
   static const _addressBookKey = 'cac_wallet_address_book_v1';
+  static const _watchListKey = 'cac_wallet_watch_list_v1';
 
   static const _storage = FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -50,6 +51,7 @@ class WalletStorage {
     await _storage.delete(key: '${_addressIndicesKeyPrefix}mainnet');
     await _storage.delete(key: '${_addressIndicesKeyPrefix}testnet');
     await _storage.delete(key: _addressBookKey);
+    await _storage.delete(key: _watchListKey);
   }
 
   Future<void> saveActiveNetwork(String networkName) async {
@@ -87,6 +89,21 @@ class WalletStorage {
 
   Future<List<Map<String, String>>> readAddressBook() async {
     final raw = await _storage.read(key: _addressBookKey);
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List)
+        .map((e) => (e as Map).cast<String, String>())
+        .toList();
+  }
+
+  /// Arbitrary addresses the user wants to monitor without holding their
+  /// keys -- pure bookkeeping, same reasoning as address indices/book
+  /// above for why this lives here instead of a separate storage plugin.
+  Future<void> saveWatchList(List<Map<String, String>> entries) async {
+    await _storage.write(key: _watchListKey, value: jsonEncode(entries));
+  }
+
+  Future<List<Map<String, String>>> readWatchList() async {
+    final raw = await _storage.read(key: _watchListKey);
     if (raw == null) return [];
     return (jsonDecode(raw) as List)
         .map((e) => (e as Map).cast<String, String>())
