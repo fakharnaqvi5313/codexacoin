@@ -2182,3 +2182,18 @@ real page reload, transaction detail modal, and the QR scanner's
 camera-denied error path. Multi-key signing and the full multisig
 propose-sign-sign-finalize round trip verified directly against
 `crypto.js` (no live gateway/funds available to test a real broadcast).
+
+### 20.4 Re-verified against the live deployment, then wiped
+
+After deploying to `codexacoin.com/wallet/`, re-ran the QR and multisig
+checks against production itself rather than trusting the local test
+result alone: created a real wallet in-browser, confirmed the receive
+screen's QR canvas actually decodes (via jsQR) back to the exact address
+shown -- a genuine encode/decode round trip, not just "a QR-shaped image
+rendered" -- and generated a live 2-of-2 multisig redeem script/address
+(`SPXWncarZW39nr2iDXmJZKBWUrcXJMLWsj`) and signed a test proposal with
+the real derived key, confirming the signature landed under the correct
+pubkey. All of this is local browser storage and read-only gateway
+calls -- no funds moved, no state changed on the actual CAC chain or
+gateway. `localStorage`/`sessionStorage` for that test session cleared
+immediately after, so no test wallet lingers in that browser profile.

@@ -1212,6 +1212,12 @@ above.
   decisions (why the PIN lock is real encryption, why multi-address
   isn't gap-limit discovery, why multisig signs sequentially rather
   than supporting parallel-copy merging).
+- Deployed to `codexacoin.com/wallet/`, then re-verified QR and multisig
+  directly against production (not just the local test): the receive
+  QR canvas decodes back to the exact displayed address, and a live
+  2-of-2 multisig address/signature round trip checked out. Test
+  wallet's `localStorage`/`sessionStorage` cleared immediately after --
+  see `PARAMETERS.md` section 20.4.
 
 ---
 
