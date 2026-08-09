@@ -3,6 +3,7 @@ import { Gateway, GatewayError } from "./gateway.js";
 import * as qr from "./qr.js";
 import * as storage from "./storage.js";
 import { fetchCacUsdPrice } from "./price.js";
+import { signMessage, verifyMessage } from "./message.js";
 
 // Production default: empty string, so Gateway's fetch(this.baseUrl + path)
 // calls resolve against the page's own origin (see explorer/app.js and
@@ -125,6 +126,16 @@ function showScreen(name) {
   if (name === "multisig") loadMultisig();
   if (name === "watch") loadWatch();
   if (name === "settings") loadSettings();
+  // Only polls while Home or History is the visible screen, and only
+  // while a wallet is actually unlocked -- see checkForNewTx. Not
+  // background work: the interval is cleared the moment the user
+  // navigates elsewhere, same as this being a plain tab getting closed
+  // would stop it. Distinct from mobile's "no background work" rule
+  // (docs/store-compliance.md), which is about the OS process
+  // continuing after the app itself is closed -- a foreground browser
+  // tab timer has no equivalent to disclose there.
+  if (name === "home" || name === "history") startTxPolling();
+  else stopTxPolling();
 }
 
 document.querySelectorAll(".tabbar button").forEach((btn) => {
@@ -154,11 +165,65 @@ document.getElementById("confirm-written").addEventListener("change", (e) => {
   document.getElementById("btn-mnemonic-continue").disabled = !e.target.checked;
 });
 
-document.getElementById("btn-mnemonic-continue").addEventListener("click", async () => {
+document.getElementById("btn-mnemonic-continue").addEventListener("click", () => {
+  showMnemonicQuiz(state._pendingMnemonic);
+});
+
+// Picks 3 random distinct word positions and asks the user to retype them,
+// so a mistyped or skipped word in the backup is caught here rather than
+// the first time it's actually needed (see PARAMETERS.md section 23 for
+// why this exists -- neither wallet checked this before).
+function showMnemonicQuiz(mnemonic) {
+  const words = mnemonic.split(" ");
+  const indices = [];
+  while (indices.length < 3) {
+    const i = Math.floor(Math.random() * words.length);
+    if (!indices.includes(i)) indices.push(i);
+  }
+  indices.sort((a, b) => a - b);
+  const fieldsEl = document.getElementById("mnemonic-quiz-fields");
+  fieldsEl.innerHTML = "";
+  for (const i of indices) {
+    const label = document.createElement("label");
+    label.className = "field-label";
+    label.textContent = `Word #${i + 1}`;
+    const input = document.createElement("input");
+    input.className = "quiz-word-input";
+    input.dataset.index = String(i);
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    fieldsEl.appendChild(label);
+    fieldsEl.appendChild(input);
+  }
+  document.getElementById("mnemonic-quiz-error").textContent = "";
+  document.getElementById("new-mnemonic-card").style.display = "none";
+  document.getElementById("mnemonic-quiz-card").style.display = "block";
+}
+
+document.getElementById("btn-quiz-back").addEventListener("click", () => {
+  document.getElementById("mnemonic-quiz-card").style.display = "none";
+  document.getElementById("new-mnemonic-card").style.display = "block";
+});
+
+document.getElementById("btn-quiz-verify").addEventListener("click", async () => {
+  const words = state._pendingMnemonic.split(" ");
+  const inputs = document.querySelectorAll("#mnemonic-quiz-fields .quiz-word-input");
+  let allCorrect = true;
+  for (const input of inputs) {
+    const idx = Number(input.dataset.index);
+    if (input.value.trim().toLowerCase() !== words[idx]) allCorrect = false;
+  }
+  const errEl = document.getElementById("mnemonic-quiz-error");
+  if (!allCorrect) {
+    errEl.textContent = "One or more words don't match. Check your written-down phrase and try again.";
+    return;
+  }
+  errEl.textContent = "";
   state.mnemonic = state._pendingMnemonic;
   localStorage.setItem("cac_mnemonic", state.mnemonic);
   state.addressIndices = [0];
   saveAddressIndices();
+  document.getElementById("mnemonic-quiz-card").style.display = "none";
   await enterWallet();
 });
 
@@ -311,12 +376,82 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
     const rawTx = cac.buildAndSignTransaction({ inputs, outputs });
     const result = await state.gateway.broadcast(cac.bytesToHex(rawTx));
     okEl.textContent = `Broadcast: ${result.txid}`;
+    recordSentTx(result.txid, {
+      inputs: chosen.map((u) => ({ txid: u.txid, vout: u.vout, valueSatoshis: Number(u.value), derivationIndex: u._index })),
+      outputs: outputs.map((o, i) => ({
+        scriptPubKeyHex: cac.bytesToHex(o.scriptPubKey),
+        valueSatoshis: o.valueSatoshis,
+        isChange: change > 0n && i === outputs.length - 1,
+        changeIndex: change > 0n && i === outputs.length - 1 ? state.activeIndex : undefined,
+      })),
+      feeSatoshis: Number(feeSatoshis),
+    });
     document.getElementById("send-address").value = "";
     document.getElementById("send-amount").value = "";
   } catch (e) {
     errEl.textContent = e instanceof GatewayError ? e.message : String(e);
   }
 });
+
+// --------------------------------------------------------- fee bumping
+
+// Local-only record of what this wallet itself sent, kept purely so
+// "bump fee" can rebuild the exact same transaction later with a higher
+// fee -- see PARAMETERS.md section 23. Only ever covers sends made from
+// this browser after this feature shipped (buildAndSignTransaction's
+// sequence default changed at the same time -- see crypto.js); older
+// sends, and sends made from a different browser/device, don't have a
+// local record and can't be bumped through this UI.
+function loadSentTxLog() {
+  const raw = localStorage.getItem("cac_sent_tx_log");
+  return raw ? JSON.parse(raw) : {};
+}
+function saveSentTxLog(log) {
+  localStorage.setItem("cac_sent_tx_log", JSON.stringify(log));
+}
+function recordSentTx(txid, record) {
+  const log = loadSentTxLog();
+  log[txid] = record;
+  saveSentTxLog(log);
+}
+
+// Rebuilds and rebroadcasts `txid` (a transaction this wallet itself
+// sent, per the local log) with a higher fee taken out of its own
+// change output. Throws with a clear, specific reason rather than
+// guessing at a fallback for any case this can't handle -- the actual
+// rebuild/reduce-change math lives in crypto.js's buildBumpFeeTransaction
+// (pure, independently testable), this just supplies the fee target and
+// re-derived keys and handles the network calls.
+async function bumpFee(txid) {
+  const log = loadSentTxLog();
+  const record = log[txid];
+  if (!record) {
+    throw new Error("No local record of this transaction -- it was either sent from a different device/browser, or before this feature existed. Can't bump its fee here.");
+  }
+  const feeResp = await state.gateway.feeEstimate();
+  const feeRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
+  const estimatedVsize = BigInt(10 + record.inputs.length * 148 + record.outputs.length * 34);
+  const rateBasedFee = Number((feeRate * estimatedVsize) / 1000n);
+  // Must be a *meaningfully* higher fee, not just technically higher
+  // (BIP125 rule 4 requires paying for the replacement's own bandwidth
+  // too) -- take whichever is larger of "fresh rate estimate" and "50%
+  // more than before".
+  const newFeeSatoshis = Math.max(rateBasedFee, Math.round(record.feeSatoshis * 1.5));
+
+  const inputKeys = [];
+  for (const inp of record.inputs) {
+    const key = await ensureKey(inp.derivationIndex);
+    inputKeys.push({ privateKey: key.privateKey, publicKeyCompressed: key.publicKey });
+  }
+  const { rawTx, newOutputs } = cac.buildBumpFeeTransaction({ record, newFeeSatoshis, inputKeys });
+  const result = await state.gateway.broadcast(cac.bytesToHex(rawTx));
+
+  const log2 = loadSentTxLog();
+  delete log2[txid];
+  log2[result.txid] = { inputs: record.inputs, outputs: newOutputs, feeSatoshis: newFeeSatoshis, replacesTxid: txid };
+  saveSentTxLog(log2);
+  return result.txid;
+}
 
 // ------------------------------------------------------------- QR scanning
 
@@ -479,22 +614,31 @@ document.getElementById("btn-copy-address").addEventListener("click", () => {
 
 // ----------------------------------------------------------------- history
 
+// Shared by loadHistory's render and the background-while-open new-tx
+// check below, so there's exactly one place that knows how to combine
+// per-address history into one deduplicated, sorted list.
+async function fetchCombinedHistory() {
+  const seen = new Set();
+  const allTxs = [];
+  for (const idx of state.addressIndices) {
+    const resp = await state.gateway.history(state.addresses[idx]);
+    for (const t of resp.transactions) {
+      if (seen.has(t.txid)) continue;
+      seen.add(t.txid);
+      allTxs.push(t);
+    }
+  }
+  allTxs.sort((a, b) => (b.height ?? Infinity) - (a.height ?? Infinity));
+  return allTxs;
+}
+
 async function loadHistory() {
   const listEl = document.getElementById("history-list");
   listEl.innerHTML = '<p class="notice">Loading...</p>';
   try {
-    const seen = new Set();
-    const allTxs = [];
-    for (const idx of state.addressIndices) {
-      const resp = await state.gateway.history(state.addresses[idx]);
-      for (const t of resp.transactions) {
-        if (seen.has(t.txid)) continue;
-        seen.add(t.txid);
-        allTxs.push(t);
-      }
-    }
-    allTxs.sort((a, b) => (b.height ?? Infinity) - (a.height ?? Infinity));
+    const allTxs = await fetchCombinedHistory();
     state._lastHistory = allTxs;
+    seenTxids(allTxs);
     if (allTxs.length === 0) {
       listEl.innerHTML = '<p class="notice">No transactions yet.</p>';
       return;
@@ -512,6 +656,63 @@ async function loadHistory() {
     listEl.innerHTML = `<p class="error">${e instanceof GatewayError ? e.message : "Could not reach the network."}</p>`;
   }
 }
+
+// ------------------------------------------------- live new-tx banner
+
+let txPollHandle = null;
+
+function seenTxids(txs) {
+  if (!state._seenTxids) state._seenTxids = new Set();
+  for (const t of txs) state._seenTxids.add(t.txid);
+}
+
+function startTxPolling() {
+  stopTxPolling();
+  txPollHandle = setInterval(checkForNewTx, 30000);
+}
+function stopTxPolling() {
+  if (txPollHandle) {
+    clearInterval(txPollHandle);
+    txPollHandle = null;
+  }
+}
+
+// Polls only while Home/History is the visible screen (see showScreen)
+// and only while unlocked. The very first check after unlock just seeds
+// state._seenTxids silently (existing transactions aren't "new") --
+// only a check that finds txids beyond an already-seeded set shows the
+// banner. Errors are swallowed: this is a best-effort convenience, not
+// a user-initiated action, so a flaky network shouldn't surface an
+// error the user didn't ask to see.
+async function checkForNewTx() {
+  if (!state.mnemonic) return;
+  try {
+    const allTxs = await fetchCombinedHistory();
+    if (!state._seenTxids) {
+      seenTxids(allTxs);
+      return;
+    }
+    const newOnes = allTxs.filter((t) => !state._seenTxids.has(t.txid));
+    seenTxids(allTxs);
+    if (newOnes.length > 0) showNewTxBanner(newOnes.length);
+  } catch {
+    // silent -- see comment above
+  }
+}
+
+function showNewTxBanner(count) {
+  const banner = document.getElementById("new-tx-banner");
+  document.getElementById("new-tx-banner-text").textContent =
+    count === 1 ? "1 new transaction" : `${count} new transactions`;
+  banner.style.display = "flex";
+}
+document.getElementById("btn-new-tx-dismiss").addEventListener("click", () => {
+  document.getElementById("new-tx-banner").style.display = "none";
+});
+document.getElementById("new-tx-banner-text").addEventListener("click", () => {
+  document.getElementById("new-tx-banner").style.display = "none";
+  showScreen("history");
+});
 
 // Exports the summary fields already on screen (txid, height/status, fee)
 // -- not the full detail (inputs/outputs) for every transaction, which
@@ -540,10 +741,33 @@ async function openTxDetail(txid) {
   document.getElementById("btn-tx-detail-explorer").onclick = () => {
     window.open(`https://codexacoin.com/blockexplorer/#/tx/${txid}`, "_blank", "noopener");
   };
+  const bumpBtn = document.getElementById("btn-tx-detail-bump-fee");
+  const bumpErrEl = document.getElementById("tx-detail-bump-error");
+  const bumpOkEl = document.getElementById("tx-detail-bump-success");
+  bumpBtn.style.display = "none";
+  bumpErrEl.textContent = "";
+  bumpOkEl.textContent = "";
   const bodyEl = document.getElementById("tx-detail-body");
   bodyEl.innerHTML = '<p class="notice">Loading...</p>';
   try {
     const tx = await state.gateway.tx(txid);
+    if (!tx.height && loadSentTxLog()[txid]) {
+      bumpBtn.style.display = "block";
+      bumpBtn.onclick = async () => {
+        bumpErrEl.textContent = "";
+        bumpOkEl.textContent = "";
+        bumpBtn.disabled = true;
+        try {
+          const newTxid = await bumpFee(txid);
+          bumpOkEl.textContent = `Rebroadcast with a higher fee: ${newTxid}`;
+          bumpBtn.style.display = "none";
+        } catch (e) {
+          bumpErrEl.textContent = e.message || "Could not bump fee.";
+        } finally {
+          bumpBtn.disabled = false;
+        }
+      };
+    }
     const rows = [];
     rows.push(["Txid", tx.txid]);
     rows.push(["Status", tx.height ? `Confirmed, height ${tx.height} (${tx.confirmations} confirmations)` : "Pending"]);
@@ -962,6 +1186,50 @@ async function loadWatch() {
     }
   });
 }
+document.getElementById("btn-show-xpub").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-show-xpub");
+  const outEl = document.getElementById("my-xpub-output");
+  if (outEl.style.display !== "none") {
+    outEl.style.display = "none";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const network = cac.NETWORKS[state.network];
+    outEl.value = await cac.deriveAccountXpub({ mnemonic: state.mnemonic, network });
+    outEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-watch-xpub-add").addEventListener("click", () => {
+  const errEl = document.getElementById("watch-xpub-error");
+  errEl.textContent = "";
+  const label = document.getElementById("watch-xpub-label").value.trim();
+  const xpub = document.getElementById("watch-xpub-input").value.trim();
+  const count = Math.max(1, Math.min(50, Number(document.getElementById("watch-xpub-count").value) || 0));
+  if (!label || !xpub) {
+    errEl.textContent = "Enter a label and an xpub.";
+    return;
+  }
+  try {
+    const network = cac.NETWORKS[state.network];
+    const groupId = xpub.slice(-8);
+    const entries = loadWatchList();
+    for (let i = 0; i < count; i++) {
+      const address = cac.deriveXpubAddress({ xpub, network, index: i });
+      entries.push({ label: `${label} #${i}`, address, xpubGroup: groupId });
+    }
+    saveWatchList(entries);
+    document.getElementById("watch-xpub-label").value = "";
+    document.getElementById("watch-xpub-input").value = "";
+    loadWatch();
+  } catch (e) {
+    errEl.textContent = e.message || "Could not derive addresses from this xpub.";
+  }
+});
+
 document.getElementById("btn-watch-add").addEventListener("click", () => {
   const label = document.getElementById("watch-label").value.trim();
   const address = document.getElementById("watch-address").value.trim();
@@ -984,7 +1252,88 @@ function loadSettings() {
   refreshLockCardVisibility();
   document.getElementById("lock-settings-error").textContent = "";
   document.getElementById("lock-settings-success").textContent = "";
+  refreshThemeButtons();
+  refreshMsgSignAddressList();
 }
+
+function refreshMsgSignAddressList() {
+  const sel = document.getElementById("msg-sign-address");
+  sel.innerHTML = "";
+  for (const idx of state.addressIndices) {
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = state.addresses[idx] || `(address #${idx})`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(state.activeIndex);
+}
+
+document.getElementById("btn-msg-sign").addEventListener("click", async () => {
+  const errEl = document.getElementById("msg-sign-error");
+  const resultEl = document.getElementById("msg-sign-result");
+  errEl.textContent = "";
+  resultEl.style.display = "none";
+  const idx = Number(document.getElementById("msg-sign-address").value);
+  const message = document.getElementById("msg-sign-input").value;
+  if (!message) {
+    errEl.textContent = "Enter a message to sign.";
+    return;
+  }
+  try {
+    const key = await ensureKey(idx);
+    const signature = signMessage(key.privateKey, message);
+    document.getElementById("msg-sign-output").value = signature;
+    resultEl.style.display = "block";
+  } catch (e) {
+    errEl.textContent = e.message || "Could not sign message.";
+  }
+});
+
+document.getElementById("btn-msg-verify").addEventListener("click", () => {
+  const errEl = document.getElementById("msg-verify-error");
+  const okEl = document.getElementById("msg-verify-success");
+  errEl.textContent = "";
+  okEl.textContent = "";
+  const address = document.getElementById("msg-verify-address").value.trim();
+  const message = document.getElementById("msg-verify-message").value;
+  const signature = document.getElementById("msg-verify-signature").value.trim();
+  if (!address || !signature) {
+    errEl.textContent = "Enter an address and a signature to verify.";
+    return;
+  }
+  try {
+    const network = cac.NETWORKS[state.network];
+    const valid = verifyMessage(address, signature, message, network);
+    if (valid) okEl.textContent = "Valid signature -- this address signed this exact message.";
+    else errEl.textContent = "Invalid signature -- does not match this address/message.";
+  } catch (e) {
+    errEl.textContent = e.message || "Could not verify signature.";
+  }
+});
+
+// "system" (the default, no override) tracks the OS/browser preference
+// via style.css's prefers-color-scheme media query; "dark"/"light" pin
+// it explicitly via the data-theme attribute (see the inline script in
+// index.html's <head> for why that's applied before first paint).
+function applyTheme(choice) {
+  if (choice === "dark" || choice === "light") {
+    localStorage.setItem("cac_theme", choice);
+    document.documentElement.dataset.theme = choice;
+  } else {
+    localStorage.removeItem("cac_theme");
+    delete document.documentElement.dataset.theme;
+  }
+  refreshThemeButtons();
+}
+function refreshThemeButtons() {
+  const current = localStorage.getItem("cac_theme") || "system";
+  document.getElementById("btn-theme-system").classList.toggle("active", current === "system");
+  document.getElementById("btn-theme-dark").classList.toggle("active", current === "dark");
+  document.getElementById("btn-theme-light").classList.toggle("active", current === "light");
+}
+document.getElementById("btn-theme-system").addEventListener("click", () => applyTheme("system"));
+document.getElementById("btn-theme-dark").addEventListener("click", () => applyTheme("dark"));
+document.getElementById("btn-theme-light").addEventListener("click", () => applyTheme("light"));
 function refreshLockCardVisibility() {
   const pinSet = storage.isPinSet();
   document.getElementById("lock-not-set").style.display = pinSet ? "none" : "block";

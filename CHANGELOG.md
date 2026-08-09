@@ -1294,6 +1294,56 @@ multisig sharing to both wallets
 
 ---
 
+## Added message signing, seed-phrase backup verification, dark mode,
+xpub watch-only, fee-bumping, and a new-transaction banner to both
+wallets
+
+### 2026-08-09
+
+- Message signing/verification (Bitcoin-style, matching
+  `codexacoin-cli signmessage`/`verifymessage` exactly), so anyone can
+  prove control of a P2PKH address without spending anything. Found and
+  fixed a real bug while testing the mobile implementation's hand-rolled
+  signature-recovery math: a hardcoded curve constant was two hex
+  digits short, silently breaking every recovery attempt. Cross-checked
+  the two independent implementations against each other with a real
+  signature produced on one platform and verified on the other.
+- Seed-phrase backup verification: a short quiz (3 random word
+  positions, retyped from the phrase just shown) before wallet creation
+  completes, on both platforms -- neither previously checked that a
+  backup was actually correct.
+- Dark/Light/System theming on both platforms (previously hardcoded to
+  a single theme on each).
+- xpub-based watch-only: export this wallet's account xpub, or import
+  someone else's to derive and watch a chosen number of its addresses
+  -- no private key involved. Verified with real cross-derivation
+  checks (addresses via xpub match the same indices derived directly
+  from the private key) and a cross-platform golden vector.
+- Fee-bumping (RBF) for stuck sends: new sends now signal BIP125
+  opt-in replaceability by default, and a "Bump fee" action on a
+  pending self-sent transaction rebuilds it with a higher fee, taken
+  from its own change output. Backed by a small local-only log of what
+  each wallet itself sent (needed to safely rebuild the exact same
+  inputs); fails closed with a specific reason when bumping isn't
+  possible (no local record, no change output, or not enough change).
+- A live "new transaction" banner -- but implemented differently per
+  platform on purpose: web polls while Home/History is the open tab
+  (a foreground browser timer, no bearing on app-store background-
+  execution policy); the mobile app checks only on explicit refresh
+  (opening a screen, pull-to-refresh), since `docs/store-compliance.md`
+  prohibits any scheduled/periodic task in the Flutter project outright
+  -- a real App Store/Play Store constraint, not a style choice. A
+  deliberate, disclosed difference rather than a silently narrower port.
+- Full account of the design decisions, the bug found and fixed, and
+  how each feature was verified (including the specific cross-platform
+  checks) in `PARAMETERS.md` section 23.
+- Rebuilt and redeployed the release APK to
+  `codexacoin.com/downloads/CodexaCoin-android.apk`; `SHA256SUMS`/
+  `SHA256SUMS.asc` regenerated and re-signed. Web wallet redeployed to
+  `codexacoin.com/wallet/`.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

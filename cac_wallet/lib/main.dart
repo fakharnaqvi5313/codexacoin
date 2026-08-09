@@ -10,6 +10,30 @@ void main() {
   runApp(const CacWalletApp());
 }
 
+const _goldSeed = Color(0xFFF0C350); // matches the CAC logo's gold
+
+final ThemeData _darkTheme = ThemeData(
+  colorSchemeSeed: _goldSeed,
+  brightness: Brightness.dark,
+  useMaterial3: true,
+);
+final ThemeData _lightTheme = ThemeData(
+  colorSchemeSeed: _goldSeed,
+  brightness: Brightness.light,
+  useMaterial3: true,
+);
+
+ThemeMode _themeModeFor(String stored) {
+  switch (stored) {
+    case 'dark':
+      return ThemeMode.dark;
+    case 'light':
+      return ThemeMode.light;
+    default:
+      return ThemeMode.system;
+  }
+}
+
 class CacWalletApp extends StatelessWidget {
   const CacWalletApp({super.key});
 
@@ -17,14 +41,16 @@ class CacWalletApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => WalletService(),
-      child: MaterialApp(
-        title: 'CodexaCoin Wallet',
-        theme: ThemeData(
-          colorSchemeSeed: const Color(0xFFF0C350), // matches the CAC logo's gold
-          brightness: Brightness.dark,
-          useMaterial3: true,
+      // Consumer (not a plain child) so MaterialApp rebuilds with the new
+      // themeMode as soon as Settings changes it -- no app restart needed.
+      child: Consumer<WalletService>(
+        builder: (context, wallet, _) => MaterialApp(
+          title: 'CodexaCoin Wallet',
+          theme: _lightTheme,
+          darkTheme: _darkTheme,
+          themeMode: _themeModeFor(wallet.themeMode),
+          home: const _Bootstrap(),
         ),
-        home: const _Bootstrap(),
       ),
     );
   }

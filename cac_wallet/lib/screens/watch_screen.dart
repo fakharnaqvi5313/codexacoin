@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../crypto/xpub.dart' as xpub;
 import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
 
@@ -23,6 +24,12 @@ class _WatchScreenState extends State<WatchScreen> {
   final Map<int, String> _balances = {};
   final _labelController = TextEditingController();
   final _addressController = TextEditingController();
+
+  String? _myXpub;
+  final _xpubLabelController = TextEditingController();
+  final _xpubInputController = TextEditingController();
+  final _xpubCountController = TextEditingController(text: '5');
+  String? _xpubError;
 
   @override
   void initState() {
@@ -79,11 +86,56 @@ class _WatchScreenState extends State<WatchScreen> {
   void dispose() {
     _labelController.dispose();
     _addressController.dispose();
+    _xpubLabelController.dispose();
+    _xpubInputController.dispose();
+    _xpubCountController.dispose();
     super.dispose();
+  }
+
+  void _toggleShowXpub(WalletService wallet) {
+    if (_myXpub != null) {
+      setState(() => _myXpub = null);
+      return;
+    }
+    setState(() => _myXpub = wallet.exportAccountXpub());
+  }
+
+  Future<void> _addFromXpub(WalletService wallet) async {
+    setState(() => _xpubError = null);
+    final label = _xpubLabelController.text.trim();
+    final xpubStr = _xpubInputController.text.trim();
+    final count = int.tryParse(_xpubCountController.text.trim()) ?? 0;
+    if (label.isEmpty || xpubStr.isEmpty) {
+      setState(() => _xpubError = 'Enter a label and an xpub.');
+      return;
+    }
+    if (count < 1 || count > 50) {
+      setState(() => _xpubError = 'Choose between 1 and 50 addresses.');
+      return;
+    }
+    try {
+      final groupId = xpubStr.length >= 8 ? xpubStr.substring(xpubStr.length - 8) : xpubStr;
+      final newEntries = [
+        for (var i = 0; i < count; i++)
+          {
+            'label': '$label #$i',
+            'address': xpub.deriveXpubAddress(xpub: xpubStr, network: wallet.network, index: i),
+            'xpubGroup': groupId,
+          },
+      ];
+      final entries = [..._entries, ...newEntries];
+      await wallet.saveWatchList(entries);
+      _xpubLabelController.clear();
+      _xpubInputController.clear();
+      await _load();
+    } catch (e) {
+      setState(() => _xpubError = 'Could not derive addresses from this xpub: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final wallet = context.watch<WalletService>();
     return Scaffold(
       appBar: AppBar(title: const Text('Watch')),
       body: ListView(
@@ -105,6 +157,58 @@ class _WatchScreenState extends State<WatchScreen> {
           ),
           const SizedBox(height: 8),
           OutlinedButton(onPressed: _add, child: const Text('Add address')),
+          const Divider(height: 32),
+          const Text('Your account xpub', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text(
+            "Share this so someone else -- or this wallet restored on "
+            "another device, without its private key -- can watch your "
+            "addresses' balances. Anyone with it can see every address "
+            "this wallet generates and how much it's received, so don't "
+            "share it publicly.",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => _toggleShowXpub(wallet),
+            child: Text(_myXpub == null ? 'Show my xpub' : 'Hide'),
+          ),
+          if (_myXpub != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SelectableText(_myXpub!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            ),
+          const Divider(height: 32),
+          const Text('Watch from an xpub', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text(
+            'Add several addresses at once from an account xpub, instead '
+            'of one at a time. Derives a fixed number of addresses you '
+            'choose, not a full gap-limit scan.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: _xpubLabelController, decoration: const InputDecoration(labelText: 'Label', border: OutlineInputBorder())),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _xpubInputController,
+            maxLines: 2,
+            decoration: const InputDecoration(labelText: 'xpub', border: OutlineInputBorder()),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _xpubCountController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'How many addresses', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: () => _addFromXpub(wallet), child: const Text('Add from xpub')),
+          if (_xpubError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_xpubError!, style: const TextStyle(color: Colors.red)),
+            ),
           const SizedBox(height: 24),
           if (_entries.isEmpty) const Text('No watched addresses yet.', style: TextStyle(color: Colors.grey)),
           for (var i = 0; i < _entries.length; i++)

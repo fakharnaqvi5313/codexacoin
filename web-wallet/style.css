@@ -1,3 +1,11 @@
+/* Dark is the default/original palette. Light is an alternative, not an
+   afterthought -- picked for the same AA text-contrast target as dark
+   rather than just inverting values. Applied three ways: the plain :root
+   block (fallback for browsers without prefers-color-scheme support),
+   the media query (system preference, when the user hasn't overridden
+   it), and the [data-theme] attribute (explicit override from the
+   Settings screen, set on <html> before first paint by the inline
+   script in index.html so there's no flash of the wrong theme). */
 :root {
   --gold: #f0c350;
   --bg: #121016;
@@ -7,6 +15,42 @@
   --danger: #e06666;
   --ok: #6fcf97;
   --border: #322c3a;
+  --input-bg: #0d0b11;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --gold: #ab7a12;
+    --bg: #f7f5fa;
+    --bg-card: #ffffff;
+    --text: #1c1922;
+    --text-dim: #6b6475;
+    --danger: #c0392b;
+    --ok: #1e8e5a;
+    --border: #e0dce6;
+    --input-bg: #ffffff;
+  }
+}
+:root[data-theme="light"] {
+  --gold: #ab7a12;
+  --bg: #f7f5fa;
+  --bg-card: #ffffff;
+  --text: #1c1922;
+  --text-dim: #6b6475;
+  --danger: #c0392b;
+  --ok: #1e8e5a;
+  --border: #e0dce6;
+  --input-bg: #ffffff;
+}
+:root[data-theme="dark"] {
+  --gold: #f0c350;
+  --bg: #121016;
+  --bg-card: #1c1922;
+  --text: #ece7e0;
+  --text-dim: #9b93a3;
+  --danger: #e06666;
+  --ok: #6fcf97;
+  --border: #322c3a;
+  --input-bg: #0d0b11;
 }
 
 * { box-sizing: border-box; }
@@ -37,6 +81,28 @@ header .network-badge {
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+.new-tx-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--gold);
+  color: #201a08;
+  font-size: 13px;
+  font-weight: 600;
+}
+.new-tx-banner span[role="button"] { cursor: pointer; }
+.new-tx-banner button {
+  width: auto;
+  margin-top: 0;
+  padding: 0 8px;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
 }
 
 main { flex: 1; padding: 20px; }
@@ -72,6 +138,7 @@ button {
 button.primary { background: var(--gold); color: #201a08; font-weight: 600; }
 button.secondary { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
 button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+button.secondary.active { background: var(--gold); color: #201a08; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 input, textarea, select {
@@ -80,7 +147,7 @@ input, textarea, select {
   padding: 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #0d0b11;
+  background: var(--input-bg);
   color: var(--text);
   margin-bottom: 12px;
 }
@@ -99,7 +166,7 @@ select {
   padding-right: 36px;
 }
 select option {
-  background: #0d0b11;
+  background: var(--input-bg);
   color: var(--text);
 }
 
@@ -129,7 +196,7 @@ select option {
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
 
 .mnemonic-box {
-  background: #0d0b11;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;

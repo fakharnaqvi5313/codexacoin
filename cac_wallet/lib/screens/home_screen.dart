@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Balance? _balance;
   String? _error;
   bool _loading = true;
+  int _newTxCount = 0;
 
   @override
   void initState() {
@@ -44,6 +45,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final wallet = context.read<WalletService>();
       final json = await wallet.fetchBalance();
       setState(() => _balance = Balance.fromJson(json));
+      // Best-effort: a failure here shouldn't block the balance refresh
+      // that's the actual point of this pull.
+      try {
+        final newCount = await wallet.checkForNewTransactions();
+        if (mounted) setState(() => _newTxCount = newCount);
+      } catch (_) {}
     } catch (e) {
       setState(() => _error = 'Could not reach the network: $e');
     } finally {
@@ -71,6 +78,41 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            if (_newTxCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Material(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      setState(() => _newTxCount = 0);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _newTxCount == 1 ? '1 new transaction' : '$_newTxCount new transactions',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => setState(() => _newTxCount = 0),
+                            tooltip: 'Dismiss',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Text(
               wallet.network.name,
               style: Theme.of(context).textTheme.labelLarge,

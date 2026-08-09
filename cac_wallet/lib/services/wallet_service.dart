@@ -13,6 +13,7 @@ import '../config/network_config.dart';
 import '../crypto/address.dart';
 import '../crypto/keys.dart';
 import '../crypto/transaction.dart' as tx;
+import '../crypto/xpub.dart' as xpub;
 import 'gateway_api.dart';
 import 'wallet_storage.dart';
 
@@ -24,6 +25,11 @@ class WalletService extends ChangeNotifier {
   String? _mnemonic;
   String? _stakeToken;
   bool loaded = false;
+
+  // 'system' (default), 'dark', or 'light' -- kept as a plain string
+  // rather than Flutter's ThemeMode enum so this file doesn't need a
+  // material.dart import; main.dart maps it to ThemeMode.
+  String themeMode = 'system';
 
   // Every BIP44 index this wallet has generated on this device for the
   // current network -- not full gap-limit discovery, see activeAddress().
@@ -47,8 +53,15 @@ class WalletService extends ChangeNotifier {
     _gateway = GatewayApi(network);
     _mnemonic = await _storage.readMnemonic();
     _stakeToken = await _storage.readStakeToken();
+    themeMode = await _storage.readThemeMode() ?? 'system';
     if (_mnemonic != null) await _deriveAllKnownAddresses();
     loaded = true;
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(String mode) async {
+    themeMode = mode;
+    await _storage.saveThemeMode(mode);
     notifyListeners();
   }
 
@@ -263,6 +276,36 @@ class WalletService extends ChangeNotifier {
     return {'transactions': all};
   }
 
+  /// Compares the current combined transaction list against what was
+  /// seen the last time this was called, returns how many are new, and
+  /// updates the persisted "seen" set. Returns 0 (and just seeds the
+  /// set) the very first time it's ever called for this wallet, since
+  /// pre-existing transactions aren't "new".
+  ///
+  /// Deliberately *not* a timer/poll -- only ever called from an
+  /// explicit user action (opening Home/History, pull-to-refresh). The
+  /// web wallet's equivalent polls every 30s while its Home/History
+  /// screen is the visible browser tab, which is fine there (a
+  /// foreground JS interval in a tab has no bearing on app-store
+  /// background-execution policy) but would not be fine here --
+  /// docs/store-compliance.md states flatly that this Flutter project
+  /// has no scheduled/periodic tasks of any kind, which is a real
+  /// constraint from Apple/Google's virtual-currency-app review
+  /// guidelines, not just a style preference. So mobile trades "live
+  /// while the screen happens to be open" for "freshly checked every
+  /// time you look" -- said explicitly here rather than silently
+  /// shipping a narrower version of the web feature.
+  Future<int> checkForNewTransactions() async {
+    final json = await fetchHistory();
+    final currentTxids = (json['transactions'] as List<dynamic>? ?? const [])
+        .map((e) => (e as Map<String, dynamic>)['txid'] as String)
+        .toSet();
+    final seen = (await _storage.readSeenTxids()).toSet();
+    await _storage.saveSeenTxids(currentTxids.toList());
+    if (seen.isEmpty) return 0;
+    return currentTxids.difference(seen).length;
+  }
+
   /// Fetches UTXOs across every known address, each tagged with the
   /// signing key it actually belongs to, ready to hand straight to
   /// sendTransaction. Reverses the gateway's display-order txid hex to
@@ -329,15 +372,121 @@ class WalletService extends ChangeNotifier {
       throw ArgumentError('Insufficient funds: have $totalIn, need ${amountSatoshis + feeSatoshis}');
     }
 
+    final changeScript = tx.p2pkhScriptPubKey(hash160(changeKey.publicKey));
     final outputs = <tx.TxOutputSpec>[
       tx.TxOutputSpec(outScript, amountSatoshis),
-      if (change > 0) tx.TxOutputSpec(tx.p2pkhScriptPubKey(hash160(changeKey.publicKey)), change),
+      if (change > 0) tx.TxOutputSpec(changeScript, change),
     ];
 
     final rawTx = tx.buildAndSignTransaction(inputs: utxos, outputs: outputs);
 
     final hex = rawTx.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    return _gateway.broadcast(hex);
+    final txid = await _gateway.broadcast(hex);
+
+    final record = tx.SentTxRecord(
+      inputs: [
+        for (final u in utxos)
+          tx.SentTxInput(
+            txidHex: _bytesToHexReversed(u.txid),
+            vout: u.vout,
+            valueSatoshis: u.valueSatoshis,
+            derivationIndex: _indexForPubkeyHash(u.pubkeyHash),
+          ),
+      ],
+      outputs: [
+        tx.SentTxOutput(scriptPubKeyHex: _bytesToHex(outScript), valueSatoshis: amountSatoshis),
+        if (change > 0)
+          tx.SentTxOutput(scriptPubKeyHex: _bytesToHex(changeScript), valueSatoshis: change, isChange: true),
+      ],
+      feeSatoshis: feeSatoshis,
+    );
+    final log = await _storage.readSentTxLog();
+    log[txid] = record.toJson();
+    await _storage.saveSentTxLog(log);
+
+    return txid;
+  }
+
+  String _bytesToHex(Uint8List b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+  String _bytesToHexReversed(Uint8List b) => _bytesToHex(Uint8List.fromList(b.reversed.toList()));
+
+  /// The derivation index whose key hashes to [pubkeyHash] -- every UTXO
+  /// this wallet spends belongs to a known index (see gatherAllUtxos),
+  /// so this should always find a match for anything sendTransaction was
+  /// actually given.
+  int _indexForPubkeyHash(Uint8List pubkeyHash) {
+    for (final idx in _addressIndices) {
+      final key = _keys[idx];
+      if (key != null && _bytesEqual(hash160(key.publicKey), pubkeyHash)) return idx;
+    }
+    throw StateError('No known address for this UTXO\'s pubkey hash');
+  }
+
+  bool _bytesEqual(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// Whether a local sent-tx record exists for [txid] -- i.e. whether
+  /// "bump fee" is even possible here (see bumpFee()).
+  Future<bool> hasSentTxRecord(String txid) async {
+    final log = await _storage.readSentTxLog();
+    return log.containsKey(txid);
+  }
+
+  /// Rebuilds and rebroadcasts [txid] (a transaction this wallet itself
+  /// sent, per the local log) with a higher fee taken out of its own
+  /// change output. Throws with a clear, specific reason rather than
+  /// guessing at a fallback for any case this can't handle -- the
+  /// actual rebuild/reduce-change math lives in transaction.dart's
+  /// buildBumpFeeTransaction (pure, independently tested), this just
+  /// supplies the fee target and re-derived keys and handles the
+  /// network calls.
+  Future<String> bumpFee(String txid) async {
+    final log = await _storage.readSentTxLog();
+    final recordJson = log[txid];
+    if (recordJson == null) {
+      throw StateError(
+          "No local record of this transaction -- it was either sent from a different device/install, or before this feature existed. Can't bump its fee here.");
+    }
+    final record = tx.SentTxRecord.fromJson((recordJson as Map).cast<String, dynamic>());
+
+    final feeResp = await _gateway.feeEstimate();
+    final feeRate = int.tryParse(feeResp['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
+    final estimatedVsize = 10 + record.inputs.length * 148 + record.outputs.length * 34;
+    final rateBasedFee = (feeRate * estimatedVsize) ~/ 1000;
+    // Must be a *meaningfully* higher fee, not just technically higher
+    // (BIP125 rule 4 requires paying for the replacement's own
+    // bandwidth too) -- take whichever is larger of "fresh rate
+    // estimate" and "50% more than before".
+    final newFeeSatoshis = [rateBasedFee, (record.feeSatoshis * 3) ~/ 2].reduce((a, b) => a > b ? a : b);
+
+    final inputPrivateKeys = <Uint8List>[];
+    final inputPublicKeys = <Uint8List>[];
+    for (final inp in record.inputs) {
+      final key = await ensureKey(inp.derivationIndex);
+      inputPrivateKeys.add(key.privateKey);
+      inputPublicKeys.add(key.publicKey);
+    }
+
+    final result = tx.buildBumpFeeTransaction(
+      record: record,
+      newFeeSatoshis: newFeeSatoshis,
+      inputPrivateKeys: inputPrivateKeys,
+      inputPublicKeys: inputPublicKeys,
+    );
+    final hex = result.rawTx.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final newTxid = await _gateway.broadcast(hex);
+
+    final log2 = await _storage.readSentTxLog();
+    log2.remove(txid);
+    log2[newTxid] = tx.SentTxRecord(inputs: record.inputs, outputs: result.newOutputs, feeSatoshis: newFeeSatoshis).toJson();
+    await _storage.saveSentTxLog(log2);
+
+    return newTxid;
   }
 
   /// This wallet's multisig identity key, independent of whichever
@@ -350,6 +499,16 @@ class WalletService extends ChangeNotifier {
 
   Future<List<Map<String, String>>> loadWatchList() => _storage.readWatchList();
   Future<void> saveWatchList(List<Map<String, String>> entries) => _storage.saveWatchList(entries);
+
+  /// This wallet's account xpub, for someone else (or this wallet
+  /// restored elsewhere) to watch its addresses' balances without ever
+  /// seeing a private key. Derived on demand from the in-memory
+  /// mnemonic -- never cached, same as every other key derivation in
+  /// this service.
+  String exportAccountXpub() {
+    if (_mnemonic == null) throw StateError('No wallet loaded');
+    return xpub.deriveAccountXpub(mnemonic: _mnemonic!, network: network);
+  }
 
   /// Wipes the stored mnemonic. Irreversible -- the caller (UI layer)
   /// must have already confirmed this with the user via an explicit,

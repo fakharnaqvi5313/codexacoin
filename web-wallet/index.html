@@ -4,6 +4,19 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CodexaCoin Web Wallet</title>
+<script>
+  // Applied before the stylesheet loads / first paint, so an explicit
+  // dark/light override (set from Settings) doesn't flash the system
+  // default for a frame. "system" (or no saved value) leaves the
+  // data-theme attribute unset entirely, so style.css's
+  // prefers-color-scheme media query is what actually governs.
+  (function () {
+    var saved = localStorage.getItem("cac_theme");
+    if (saved === "dark" || saved === "light") {
+      document.documentElement.dataset.theme = saved;
+    }
+  })();
+</script>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,6 +25,11 @@
     <h1>CodexaCoin Wallet</h1>
     <div class="network-badge" id="network-badge">mainnet</div>
   </header>
+
+  <div class="new-tx-banner" id="new-tx-banner" style="display:none">
+    <span id="new-tx-banner-text" role="button" tabindex="0"></span>
+    <button type="button" id="btn-new-tx-dismiss" aria-label="Dismiss">&times;</button>
+  </div>
 
   <!-- App lock overlay -->
   <div class="lock-overlay" id="lock-overlay" style="display:none">
@@ -45,6 +63,15 @@
         <div class="mnemonic-box mono" id="new-mnemonic"></div>
         <label class="field-label"><input type="checkbox" id="confirm-written" /> I have written down my recovery phrase</label>
         <button class="primary" id="btn-mnemonic-continue" disabled>Continue</button>
+      </div>
+      <div class="card" id="mnemonic-quiz-card" style="display:none">
+        <p><strong>Confirm your backup.</strong> Enter the requested words from
+           the phrase you just wrote down, to make sure it was recorded
+           correctly before it's needed.</p>
+        <div id="mnemonic-quiz-fields"></div>
+        <button class="primary" id="btn-quiz-verify">Verify &amp; continue</button>
+        <button class="secondary" id="btn-quiz-back">Show phrase again</button>
+        <div class="error" id="mnemonic-quiz-error"></div>
       </div>
       <div class="card">
         <p class="notice">Security note: unlike the mobile app (which stores your
@@ -144,6 +171,9 @@
       <div class="card tx-detail-card">
         <p class="field-label">Transaction</p>
         <div id="tx-detail-body"><p class="notice">Loading...</p></div>
+        <button class="secondary" id="btn-tx-detail-bump-fee" style="display:none">Bump fee</button>
+        <div class="error" id="tx-detail-bump-error"></div>
+        <div class="success" id="tx-detail-bump-success"></div>
         <button class="secondary" id="btn-tx-detail-explorer">View on explorer</button>
         <button class="secondary" id="btn-tx-detail-close">Close</button>
       </div>
@@ -308,6 +338,28 @@
         </div>
         <button class="secondary" id="btn-watch-add">Add address</button>
       </div>
+      <div class="card">
+        <p class="field-label">Your account xpub</p>
+        <p class="notice">Share this so someone else -- or this wallet
+           restored on another device, without its private key -- can
+           watch your addresses' balances. Anyone with it can see every
+           address this wallet generates and how much it's received, so
+           don't share it publicly.</p>
+        <button class="secondary" id="btn-show-xpub">Show my xpub</button>
+        <textarea id="my-xpub-output" class="mono" rows="3" readonly style="display:none"></textarea>
+      </div>
+      <div class="card">
+        <p class="field-label">Watch from an xpub</p>
+        <p class="notice">Add several addresses at once from an account
+           xpub, instead of one at a time. Derives a fixed number of
+           addresses you choose, not a full gap-limit scan.</p>
+        <input id="watch-xpub-label" placeholder="Label" />
+        <textarea id="watch-xpub-input" class="mono" rows="2" placeholder="xpub..."></textarea>
+        <label class="field-label">How many addresses</label>
+        <input id="watch-xpub-count" type="number" min="1" max="50" value="5" />
+        <button class="secondary" id="btn-watch-xpub-add">Add from xpub</button>
+        <div class="error" id="watch-xpub-error"></div>
+      </div>
       <div class="card" id="watch-list-card">
         <div id="watch-list"><p class="notice">No watched addresses yet.</p></div>
       </div>
@@ -320,6 +372,14 @@
         <div class="row">
           <button class="secondary" id="btn-net-mainnet">Mainnet</button>
           <button class="secondary" id="btn-net-testnet">Testnet</button>
+        </div>
+      </div>
+      <div class="card">
+        <label class="field-label">Theme</label>
+        <div class="row">
+          <button class="secondary" id="btn-theme-system">System</button>
+          <button class="secondary" id="btn-theme-dark">Dark</button>
+          <button class="secondary" id="btn-theme-light">Light</button>
         </div>
       </div>
       <div class="card" id="lock-settings-card">
@@ -339,6 +399,34 @@
         </div>
         <div class="error" id="lock-settings-error"></div>
         <div class="success" id="lock-settings-success"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">Sign a message</p>
+        <p class="notice">Proves control of one of your addresses, without
+           spending anything -- e.g. to verify your identity to someone
+           else off-chain.</p>
+        <label class="field-label">Sign as</label>
+        <select id="msg-sign-address"></select>
+        <label class="field-label">Message</label>
+        <textarea id="msg-sign-input" rows="2"></textarea>
+        <button class="secondary" id="btn-msg-sign">Sign</button>
+        <div id="msg-sign-result" style="display:none">
+          <label class="field-label">Signature</label>
+          <textarea id="msg-sign-output" class="mono" rows="3" readonly></textarea>
+        </div>
+        <div class="error" id="msg-sign-error"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">Verify a message</p>
+        <label class="field-label">Address</label>
+        <input id="msg-verify-address" placeholder="C..." />
+        <label class="field-label">Message</label>
+        <textarea id="msg-verify-message" rows="2"></textarea>
+        <label class="field-label">Signature</label>
+        <textarea id="msg-verify-signature" class="mono" rows="3"></textarea>
+        <button class="secondary" id="btn-msg-verify">Verify</button>
+        <div class="error" id="msg-verify-error"></div>
+        <div class="success" id="msg-verify-success"></div>
       </div>
       <div class="card">
         <button class="danger" id="btn-wipe-wallet">Wipe wallet</button>

@@ -157,7 +157,7 @@ void main() {
       ..add(_u32le(prevVout))
       ..add([subscript.length])
       ..add(subscript)
-      ..add(_u32le(0xffffffff)) // sequence
+      ..add(_u32le(0xfffffffd)) // sequence -- Utxo's default BIP125 opt-in-RBF signal
       ..add([1]) // varint: 1 output
       ..add(_u64le(outputValue))
       ..add([outputScript.length])

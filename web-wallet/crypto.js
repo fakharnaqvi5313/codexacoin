@@ -21,9 +21,21 @@ secp.etc.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp.etc.concatByt
 
 const B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+// bip32Versions: the conventional BIP32 extended-key version bytes
+// (mainnet/testnet Bitcoin's own), used purely as a well-known
+// serialization container for this wallet's own account xpub -- see
+// deriveAccountXpub/deriveXpubAddress below. Not a claim of interop
+// with generic Bitcoin tooling (CAC's own p2pkhVersion is what actually
+// gets applied when deriving an address from one of these xpubs).
 export const NETWORKS = {
-  mainnet: { p2pkhVersion: 0x1c, p2shVersion: 0x3f, wifVersion: 0x9c, bech32Hrp: "cac", bip44CoinType: 3377 },
-  testnet: { p2pkhVersion: 0x6f, p2shVersion: 0xc4, wifVersion: 0xef, bech32Hrp: "tcac", bip44CoinType: 1 },
+  mainnet: {
+    p2pkhVersion: 0x1c, p2shVersion: 0x3f, wifVersion: 0x9c, bech32Hrp: "cac", bip44CoinType: 3377,
+    bip32Versions: { private: 0x0488ade4, public: 0x0488b21e },
+  },
+  testnet: {
+    p2pkhVersion: 0x6f, p2shVersion: 0xc4, wifVersion: 0xef, bech32Hrp: "tcac", bip44CoinType: 1,
+    bip32Versions: { private: 0x04358394, public: 0x043587cf },
+  },
 };
 
 function bytesToHex(bytes) {
@@ -197,6 +209,34 @@ export async function deriveKey({ mnemonic, network, index = 0, passphrase = "",
   return { privateKey: node.privateKey, publicKey: node.publicKey };
 }
 
+// Exports this wallet's account-level extended public key ("xpub"),
+// derived at m/44'/coinType'/0' -- the standard BIP44 "account" depth,
+// one level above the external/change chains. Lets someone else (or
+// this same wallet restored on another device, without its private
+// key) derive and watch this wallet's addresses' balances without ever
+// seeing a private key -- see deriveXpubAddress below, and the "locally
+// generated, not gap-limit discovery" scoping note there.
+export async function deriveAccountXpub({ mnemonic, network, passphrase = "" }) {
+  const seed = await bip39.mnemonicToSeed(mnemonic, passphrase);
+  const root = HDKey.fromMasterSeed(seed, network.bip32Versions);
+  const account = root.derive(`m/44'/${network.bip44CoinType}'/0'`);
+  return account.publicExtendedKey;
+}
+
+// Derives external-chain address #index from an imported account xpub,
+// via BIP32 public (non-hardened) child derivation -- no private key
+// involved anywhere in this call. Throws if `xpub` doesn't decode for
+// `network` (e.g. testnet xpub imported while on mainnet -- the version
+// bytes won't match) or is otherwise malformed. Like this wallet's
+// existing multi-address support, watching from an xpub derives a
+// fixed, caller-chosen count of addresses rather than scanning for a
+// gap limit -- said explicitly in the UI.
+export function deriveXpubAddress({ xpub, network, index }) {
+  const node = HDKey.fromExtendedKey(xpub, network.bip32Versions);
+  const child = node.derive(`m/0/${index}`);
+  return p2pkhAddress(hash160(child.publicKey), network);
+}
+
 // -- legacy P2PKH transaction building/signing (mirrors transaction.dart) --
 export function p2pkhScriptPubKey(pubkeyHash20) {
   return new Uint8Array([0x76, 0xa9, 0x14, ...pubkeyHash20, 0x88, 0xac]);
@@ -275,16 +315,27 @@ function derEncodeSignature(sig) {
 }
 
 // inputs: [{txid: Uint8Array(32, internal order), vout, valueSatoshis, pubkeyHash: Uint8Array(20),
-//           privateKey?, publicKeyCompressed?}] -- an input's own privateKey/publicKeyCompressed
-// (needed once a wallet can spend UTXOs sitting at more than one derived
-// address in the same transaction) override the single global privateKey/
-// publicKeyCompressed arguments below, which stay as the default for
-// every input that doesn't specify its own -- existing single-key callers
-// are unaffected.
+//           privateKey?, publicKeyCompressed?, sequence?}] -- an input's own
+// privateKey/publicKeyCompressed (needed once a wallet can spend UTXOs
+// sitting at more than one derived address in the same transaction)
+// override the single global privateKey/publicKeyCompressed arguments
+// below, which stay as the default for every input that doesn't specify
+// its own -- existing single-key callers are unaffected. `sequence`
+// defaults to 0xfffffffd (BIP125 opt-in replace-by-fee signal, any value
+// below 0xfffffffe) rather than the plain 0xffffffff every send used
+// before this default existed -- this is what makes "bump fee" possible
+// later, since the node's inherited Bitcoin Core mempool policy only
+// allows a conflicting replacement transaction when the original
+// signalled replaceability this way. A transaction built before this
+// default existed did not signal it and can't be bumped through
+// standard replacement -- see the bumpFee logic in app.js.
 // outputs: [{scriptPubKey: Uint8Array, valueSatoshis}]
 export function buildAndSignTransaction({ inputs, outputs, privateKey, publicKeyCompressed, locktime = 0 }) {
   if (inputs.length === 0) throw new Error("No inputs provided");
-  const txInputs = inputs.map((u) => ({ prevTxid: u.txid, prevVout: u.vout, scriptSig: new Uint8Array(0) }));
+  const txInputs = inputs.map((u) => ({
+    prevTxid: u.txid, prevVout: u.vout, scriptSig: new Uint8Array(0),
+    sequence: u.sequence ?? 0xfffffffd,
+  }));
   for (let i = 0; i < inputs.length; i++) {
     const inputPrivateKey = inputs[i].privateKey ?? privateKey;
     const inputPublicKey = inputs[i].publicKeyCompressed ?? publicKeyCompressed;
@@ -459,4 +510,43 @@ export function finalizeMultisigTransaction(proposal) {
   return serializeTx(proposal.version, txInputs, outputs, proposal.locktime);
 }
 
-export { bytesToHex, hexToBytes };
+// Given a locally-recorded sent-tx entry (see app.js's recordSentTx) and
+// a target total fee, rebuilds and signs a replacement transaction that
+// spends the exact same inputs and pays every non-change output the
+// same amount, only shrinking the change output by the fee increase.
+// Throws if there's no change output to shrink, or not enough change to
+// absorb the increase -- fails closed rather than guessing at a
+// fallback (e.g. pulling in an extra input) for either case.
+// record: {inputs: [{txid, vout, valueSatoshis}], outputs: [{scriptPubKeyHex, valueSatoshis, isChange}], feeSatoshis}
+// inputKeys[i] (a {privateKey, publicKeyCompressed} pair) must correspond to record.inputs[i].
+export function buildBumpFeeTransaction({ record, newFeeSatoshis, inputKeys }) {
+  const changeOutputIndex = record.outputs.findIndex((o) => o.isChange);
+  if (changeOutputIndex === -1) {
+    throw new Error("This transaction has no change output to reduce -- can't bump its fee automatically here.");
+  }
+  const feeIncrease = newFeeSatoshis - record.feeSatoshis;
+  const changeOutput = record.outputs[changeOutputIndex];
+  const newChangeValue = changeOutput.valueSatoshis - feeIncrease;
+  if (newChangeValue <= 0) {
+    throw new Error("Not enough change left to cover a higher fee.");
+  }
+  const inputs = record.inputs.map((inp, i) => ({
+    txid: hexToBytes(inp.txid).reverse(),
+    vout: inp.vout,
+    valueSatoshis: inp.valueSatoshis,
+    pubkeyHash: hash160(inputKeys[i].publicKeyCompressed),
+    privateKey: inputKeys[i].privateKey,
+    publicKeyCompressed: inputKeys[i].publicKeyCompressed,
+  }));
+  const outputs = record.outputs.map((o, i) => ({
+    scriptPubKey: hexToBytes(o.scriptPubKeyHex),
+    valueSatoshis: i === changeOutputIndex ? newChangeValue : o.valueSatoshis,
+  }));
+  const rawTx = buildAndSignTransaction({ inputs, outputs });
+  const newOutputs = record.outputs.map((o, i) =>
+    i === changeOutputIndex ? { ...o, valueSatoshis: newChangeValue } : o
+  );
+  return { rawTx, newOutputs };
+}
+
+export { bytesToHex, hexToBytes, varInt, concatBytes };

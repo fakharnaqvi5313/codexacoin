@@ -24,6 +24,11 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
   TxDetail? _detail;
   String? _error;
 
+  bool _canBumpFee = false;
+  bool _bumping = false;
+  String? _bumpError;
+  String? _bumpSuccess;
+
   @override
   void initState() {
     super.initState();
@@ -34,12 +39,35 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
     try {
       final wallet = context.read<WalletService>();
       final json = await wallet.gateway.transaction(widget.txid);
+      final detail = TxDetail.fromJson(json);
+      final canBump = detail.isPending && await wallet.hasSentTxRecord(widget.txid);
       setState(() {
         _raw = json;
-        _detail = TxDetail.fromJson(json);
+        _detail = detail;
+        _canBumpFee = canBump;
       });
     } catch (e) {
       setState(() => _error = 'Could not load transaction: $e');
+    }
+  }
+
+  Future<void> _bumpFee() async {
+    setState(() {
+      _bumping = true;
+      _bumpError = null;
+      _bumpSuccess = null;
+    });
+    try {
+      final wallet = context.read<WalletService>();
+      final newTxid = await wallet.bumpFee(widget.txid);
+      setState(() {
+        _bumpSuccess = 'Rebroadcast with a higher fee: $newTxid';
+        _canBumpFee = false;
+      });
+    } catch (e) {
+      setState(() => _bumpError = e.toString());
+    } finally {
+      if (mounted) setState(() => _bumping = false);
     }
   }
 
@@ -87,6 +115,27 @@ class _TxDetailScreenState extends State<TxDetailScreen> {
                       ),
                     for (final vout in (_raw!['vout'] as List<dynamic>? ?? const []))
                       _kv('Output', _formatVout(vout as Map)),
+                    if (_canBumpFee) ...[
+                      const SizedBox(height: 16),
+                      OutlinedButton(
+                        onPressed: _bumping ? null : _bumpFee,
+                        child: _bumping
+                            ? const SizedBox(
+                                height: 16, width: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('Bump fee'),
+                      ),
+                    ],
+                    if (_bumpSuccess != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(_bumpSuccess!, style: const TextStyle(color: Colors.green)),
+                      ),
+                    if (_bumpError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(_bumpError!, style: const TextStyle(color: Colors.red)),
+                      ),
                   ],
                 ),
     );

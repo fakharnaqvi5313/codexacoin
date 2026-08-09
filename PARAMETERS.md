@@ -2405,3 +2405,198 @@ web-wallet code than §21 was (all six features reuse the same parsing/
 formatting logic, just swapped from JS to Dart), which narrows the risk
 somewhat, but is not a substitute for actually tapping through the new
 screens.
+
+## 23. Fourth feature round: message signing, seed-phrase backup
+verification, dark mode, xpub watch-only, fee-bumping, live new-tx
+banner (2026-08-09)
+
+Asked a fourth time what else could be added. This round's six items
+were the ones that survived comparing both wallets against a genuinely
+full-featured wallet's usual surface, deliberately excluding
+hardware-wallet support, cold staking, and governance (already scoped
+as future work, §14/§21.4/§58) since nothing changed about their
+blockers. User said "build all." Web-wallet built and verified first,
+mobile ported second, matching the established pattern -- except where
+noted in §23.6, where the two platforms deliberately diverge.
+
+### 23.1 Message signing/verification -- and a real bug it caught
+
+Both platforms implement Bitcoin-style "sign a message with an
+address's key" / "verify a signature against an address," mirroring
+`codexacoin-core/src/util/message.cpp`'s `MessageHash`/`MessageSign`/
+`MessageVerify` exactly (same `MESSAGE_MAGIC` string, same
+compact-size-prefixed double-SHA256 preimage, same 65-byte compact
+recoverable signature format) -- a signature produced by either wallet,
+or by `codexacoin-cli signmessage`, verifies on any of the others. Only
+P2PKH addresses are supported, matching the node's own restriction:
+recovering a pubkey and comparing its hash160 to the address only makes
+sense for a pubkey-hash address, not a script or witness program.
+
+Web (`web-wallet/message.js`) uses `@noble/secp256k1`'s built-in
+signature recovery (`sig.recovery`, computed as part of signing).
+Mobile (`cac_wallet/lib/crypto/message.dart`) has no such library
+support -- pointycastle's `ECDSASigner` doesn't do public-key recovery
+-- so the recovery id is found by brute force: try each of the 4
+possible ids, recover a candidate pubkey via the standard formula
+`Q = r^-1 * (s*R - z*G)`, and keep whichever one matches the pubkey
+already known to have signed. This is the highest-risk hand-rolled code
+in this round, and testing it caught a real bug: the hardcoded
+secp256k1 field prime used for the recid-overflow check was 62 hex
+characters instead of 64 (two digits short, making it 248 bits instead
+of 256) -- smaller than the curve order `n`, so every recovery
+candidate spuriously looked like it overflowed and recovery always
+failed. Caught by a real sign-then-verify round trip test failing with
+"Could not determine a recovery id," not by static analysis, which saw
+nothing wrong. Fixed by correcting the constant; verified via a
+standalone debug script that printed each candidate recid's recovered
+pubkey before and after the fix.
+
+Beyond the fix, both implementations were checked against each other
+directly: a signature produced live by `web-wallet/message.js` for a
+known test mnemonic was captured and pinned as a golden vector in
+`cac_wallet/test/crypto/message_test.dart`, which asserts it verifies
+correctly under the mobile implementation. Two independently-written
+implementations of a hand-rolled recovery scheme agreeing on the exact
+byte-for-byte wire format is a much stronger signal than either one
+passing its own tests in isolation.
+
+### 23.2 Seed-phrase backup verification quiz
+
+Neither wallet previously checked that a user's mnemonic backup was
+actually correct -- the "I have written down my recovery phrase"
+checkbox was trust-based. Both platforms now follow the phrase display
+with a quiz: 3 random word positions, retyped from memory/the written
+backup, checked before the wallet is actually created. Getting a word
+wrong shows a clear error and offers "Show phrase again" rather than
+silently regenerating a new mnemonic or blocking progress outright.
+Pure UI logic, no new crypto; verified with a full live click-through
+on web (wrong answer correctly rejected, correct answer proceeded to
+the wallet) rather than just reading the code.
+
+### 23.3 Dark mode / theming
+
+Both wallets previously hardcoded a single theme (web: dark-only; the
+mobile app: `brightness: Brightness.dark` unconditionally). Both now
+support System/Dark/Light, chosen from Settings and persisted (web:
+`localStorage`; mobile: the same secure-storage instance as everything
+else non-secret in `wallet_storage.dart`). Web applies the choice via a
+`data-theme` attribute set by an inline script in `<head>` before the
+stylesheet loads, so there's no flash of the wrong theme; "System" (no
+stored value) leaves the attribute unset entirely and defers to a
+`prefers-color-scheme` media query. Mobile wraps `MaterialApp` in a
+`Consumer<WalletService>` so `themeMode` changes rebuild it live, no
+restart needed. Verified live on web (toggling actually changed
+`getComputedStyle(document.body).backgroundColor` to the right values
+for all three settings); mobile verified via `flutter analyze` plus
+reading the reactive-rebuild wiring, no simulator available this
+session (§21.3's standing limitation).
+
+### 23.4 xpub-based watch-only
+
+The existing watch-only feature (§22.4) tracks one address at a time.
+Both wallets can now also export their own account-level extended
+public key ("xpub," at `m/44'/coinType'/0'`, the standard BIP44
+"account" depth) and import someone else's xpub to derive and watch a
+chosen number of its addresses -- via BIP32 public (non-hardened) child
+derivation, no private key involved on either end. Uses the
+conventional BIP32 version bytes (the same pair Bitcoin mainnet/testnet
+use) purely as a well-known serialization container, not a claim of
+interop with generic Bitcoin tooling -- CAC's own address version bytes
+are what actually get applied when an address is derived from one of
+these xpubs. Same "locally generated, not gap-limit discovery" scoping
+as multi-address (§20.1): a caller-chosen fixed count of addresses, not
+a scan.
+
+Verified with real cross-derivation checks, not just "it doesn't
+throw": on web, addresses derived from an exported xpub were checked
+byte-for-byte against the same indices derived directly from the
+wallet's own private key (exact match). On mobile, the same check is a
+permanent test (`cac_wallet/test/crypto/xpub_test.dart`), plus a golden
+vector: the exact xpub string produced live by `web-wallet/crypto.js`
+for a known mnemonic is pinned and asserted to match mobile's own
+`deriveAccountXpub` output for the same mnemonic, and to derive the
+same three addresses -- confirming the two independently-configured
+BIP32 setups agree exactly, the same cross-platform-agreement standard
+applied to message signing in §23.1.
+
+### 23.5 Fee-bumping (RBF) for stuck sends
+
+CodexaCoin's core inherits Bitcoin's opt-in RBF (BIP125) at the
+mempool-policy level, but neither wallet previously signaled
+replaceability on its own sends (`nSequence` was always the plain
+`0xffffffff`), so no past transaction from either wallet can be
+fee-bumped through standard replacement. Fixed going forward: `Utxo`
+(mobile) and the equivalent input shape (web) now default every new
+send's inputs to `0xfffffffd` (BIP125's opt-in signal, any value below
+`0xfffffffe`).
+
+Bumping a stuck transaction needs to know its exact original
+inputs/outputs to safely build a conflicting replacement. Rather than
+reconstructing that from chain data (which would need new gateway
+endpoints to expose prevout scriptPubKeys), each wallet keeps a small
+local-only log of what it itself sent -- inputs (with which derivation
+index owns each one), outputs (with which one is change), and the fee
+paid -- written at send time, keyed by txid. "Bump fee" (a button on
+the transaction-detail screen, shown only for a pending transaction
+with a local record) rebuilds and re-signs the same inputs, keeps every
+non-change output the same, and shrinks the change output by the fee
+increase; it fails closed with a specific message if there's no local
+record (sent from a different device/install, or before this feature
+existed), no change output to shrink, or not enough change to absorb
+the increase -- deliberately not attempting to pull in an extra input,
+which would need its own coin selection and re-signing complexity for
+a case that's rare in practice (this wallet doesn't build
+change-less sends except on an exact sweep). This is a real, disclosed
+scope boundary: a transaction sent before this shipped, or from
+another device, cannot be bumped here.
+
+The rebuild math itself is a pure function on both platforms
+(`web-wallet/crypto.js`'s `buildBumpFeeTransaction`,
+`cac_wallet/lib/crypto/transaction.dart`'s function of the same name)
+separated from the UI/network glue, mirroring this codebase's existing
+crypto.js/app.js split -- and independently tested on both: change
+reduced by exactly the fee increase, non-change outputs untouched, both
+failure cases (no change output; fee increase bigger than the change)
+throwing rather than guessing, and the resulting transaction's
+embedded sequence number checked to actually be `0xfffffffd` and its
+signature checked against the real signing pubkey. Web verified live
+via `buildBumpFeeTransaction` called directly in-browser; mobile via
+`cac_wallet/test/crypto/bump_fee_test.dart`.
+
+### 23.6 Live new-transaction banner -- a deliberate platform difference
+
+Web polls (every 30s, via `setInterval`) while Home or History is the
+visible tab, comparing the combined transaction list against what was
+already seen and showing a dismissible "N new transaction(s)" banner
+for anything beyond that -- cleared the moment the user navigates away.
+A foreground browser-tab timer has no relationship to app-store
+background-execution policy, so this was a reasonable design there.
+
+Mobile does **not** do this. `docs/store-compliance.md` states flatly
+that the Flutter project has zero scheduled/periodic tasks of any kind
+-- a real, load-bearing constraint from Apple/Google's virtual-currency
+app review guidelines (§5 of that doc), not a style preference, and a
+`Timer.periodic` polling loop would contradict it even if scoped to a
+foreground screen and cancelled on dispose. So mobile trades "live
+while the screen happens to be open" for "freshly checked every time
+you look": `WalletService.checkForNewTransactions()` runs only from an
+explicit user action (opening Home/History, pull-to-refresh), diffs
+against a persisted "last seen" txid set, and shows the same kind of
+banner for whatever's new since the last check -- seeding silently on
+the very first-ever call so pre-existing transactions aren't reported
+as new. This is a real, disclosed reduction in liveness compared to
+web, not an oversight -- catching this before implementation (by
+actually reading the compliance doc's rule rather than assuming the
+web design would transfer) avoided writing mobile code that would
+have undermined this project's own compliance architecture.
+
+### 23.7 Verification and deployment
+
+Web: every feature exercised against a running instance, not just read
+-- covered individually in §23.1-23.6 above. Mobile: `flutter analyze`
+clean; full test suite passing (message, xpub, and bump-fee tests
+described above, plus all pre-existing tests unaffected); live
+simulator verification still blocked by the standing iOS Simulator
+issue. Release APK rebuilt and redeployed to
+`codexacoin.com/downloads/CodexaCoin-android.apk` with re-signed
+`SHA256SUMS`; web wallet redeployed to `codexacoin.com/wallet/`.

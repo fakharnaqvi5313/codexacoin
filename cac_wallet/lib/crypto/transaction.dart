@@ -44,6 +44,16 @@ class Utxo {
   // global args, so existing single-key callers are unaffected.
   final Uint8List? privateKey;
   final Uint8List? publicKeyCompressed;
+  // BIP125 opt-in replace-by-fee signal (any value below 0xfffffffe).
+  // Defaulting every new send to this (rather than the plain
+  // 0xffffffff every send used before this field existed) is what makes
+  // "bump fee" possible later -- the node's inherited Bitcoin Core
+  // mempool policy only allows a conflicting replacement transaction
+  // when the original signalled replaceability this way. A transaction
+  // built before this default existed did not signal it and can't be
+  // bumped through standard replacement -- see wallet_service.dart's
+  // bumpFee().
+  final int sequence;
   const Utxo({
     required this.txid,
     required this.vout,
@@ -51,6 +61,7 @@ class Utxo {
     required this.pubkeyHash,
     this.privateKey,
     this.publicKeyCompressed,
+    this.sequence = 0xfffffffd,
   });
 }
 
@@ -218,7 +229,7 @@ Uint8List buildAndSignTransaction({
     throw ArgumentError('No inputs provided');
   }
   final txInputs = [
-    for (final u in inputs) _TxInput(u.txid, u.vout, Uint8List(0)),
+    for (final u in inputs) _TxInput(u.txid, u.vout, Uint8List(0), sequence: u.sequence),
   ];
 
   final domain = ECDomainParameters('secp256k1');
@@ -252,6 +263,128 @@ Uint8List buildAndSignTransaction({
   }
 
   return _serialize(2, txInputs, outputs, locktime);
+}
+
+/// A locally-recorded sent-tx entry, kept purely so "bump fee" can
+/// rebuild the exact same transaction later with a higher fee -- see
+/// wallet_service.dart's recordSentTx/bumpFee and web-wallet/
+/// crypto.js's buildBumpFeeTransaction, which this mirrors exactly.
+class SentTxInput {
+  final String txidHex; // display order, as returned by the gateway
+  final int vout;
+  final int valueSatoshis;
+  final int derivationIndex;
+  const SentTxInput({
+    required this.txidHex,
+    required this.vout,
+    required this.valueSatoshis,
+    required this.derivationIndex,
+  });
+  Map<String, dynamic> toJson() =>
+      {'txid': txidHex, 'vout': vout, 'valueSatoshis': valueSatoshis, 'derivationIndex': derivationIndex};
+  factory SentTxInput.fromJson(Map<String, dynamic> j) => SentTxInput(
+        txidHex: j['txid'] as String,
+        vout: j['vout'] as int,
+        valueSatoshis: j['valueSatoshis'] as int,
+        derivationIndex: j['derivationIndex'] as int,
+      );
+}
+
+class SentTxOutput {
+  final String scriptPubKeyHex;
+  final int valueSatoshis;
+  final bool isChange;
+  const SentTxOutput({required this.scriptPubKeyHex, required this.valueSatoshis, this.isChange = false});
+  Map<String, dynamic> toJson() =>
+      {'scriptPubKeyHex': scriptPubKeyHex, 'valueSatoshis': valueSatoshis, 'isChange': isChange};
+  factory SentTxOutput.fromJson(Map<String, dynamic> j) => SentTxOutput(
+        scriptPubKeyHex: j['scriptPubKeyHex'] as String,
+        valueSatoshis: j['valueSatoshis'] as int,
+        isChange: j['isChange'] as bool? ?? false,
+      );
+}
+
+class SentTxRecord {
+  final List<SentTxInput> inputs;
+  final List<SentTxOutput> outputs;
+  final int feeSatoshis;
+  const SentTxRecord({required this.inputs, required this.outputs, required this.feeSatoshis});
+  Map<String, dynamic> toJson() => {
+        'inputs': [for (final i in inputs) i.toJson()],
+        'outputs': [for (final o in outputs) o.toJson()],
+        'feeSatoshis': feeSatoshis,
+      };
+  factory SentTxRecord.fromJson(Map<String, dynamic> j) => SentTxRecord(
+        inputs: [
+          for (final i in (j['inputs'] as List)) SentTxInput.fromJson((i as Map).cast<String, dynamic>()),
+        ],
+        outputs: [
+          for (final o in (j['outputs'] as List)) SentTxOutput.fromJson((o as Map).cast<String, dynamic>()),
+        ],
+        feeSatoshis: j['feeSatoshis'] as int,
+      );
+}
+
+class BumpFeeResult {
+  final Uint8List rawTx;
+  final List<SentTxOutput> newOutputs;
+  const BumpFeeResult(this.rawTx, this.newOutputs);
+}
+
+/// Rebuilds and signs a replacement transaction spending the exact same
+/// inputs as [record], paying every non-change output the same amount,
+/// only shrinking the change output by the fee increase. Throws
+/// [StateError] if there's no change output to shrink, or not enough
+/// change to absorb the increase -- fails closed rather than guessing
+/// at a fallback (e.g. pulling in an extra input) for either case.
+/// [inputPrivateKeys]/[inputPublicKeys][i] must correspond to
+/// [record]'s inputs[i].
+BumpFeeResult buildBumpFeeTransaction({
+  required SentTxRecord record,
+  required int newFeeSatoshis,
+  required List<Uint8List> inputPrivateKeys,
+  required List<Uint8List> inputPublicKeys,
+}) {
+  final changeIndex = record.outputs.indexWhere((o) => o.isChange);
+  if (changeIndex == -1) {
+    throw StateError("This transaction has no change output to reduce -- can't bump its fee automatically here.");
+  }
+  final feeIncrease = newFeeSatoshis - record.feeSatoshis;
+  final newChangeValue = record.outputs[changeIndex].valueSatoshis - feeIncrease;
+  if (newChangeValue <= 0) {
+    throw StateError('Not enough change left to cover a higher fee.');
+  }
+  final inputs = <Utxo>[
+    for (var i = 0; i < record.inputs.length; i++)
+      Utxo(
+        txid: _hexToBytesReversedLocal(record.inputs[i].txidHex),
+        vout: record.inputs[i].vout,
+        valueSatoshis: record.inputs[i].valueSatoshis,
+        pubkeyHash: hash160(inputPublicKeys[i]),
+        privateKey: inputPrivateKeys[i],
+        publicKeyCompressed: inputPublicKeys[i],
+      ),
+  ];
+  final outputs = <TxOutputSpec>[
+    for (var i = 0; i < record.outputs.length; i++)
+      TxOutputSpec(
+        _hexToBytesLocal(record.outputs[i].scriptPubKeyHex),
+        i == changeIndex ? newChangeValue : record.outputs[i].valueSatoshis,
+      ),
+  ];
+  final rawTx = buildAndSignTransaction(inputs: inputs, outputs: outputs);
+  final newOutputs = <SentTxOutput>[
+    for (var i = 0; i < record.outputs.length; i++)
+      i == changeIndex
+          ? SentTxOutput(scriptPubKeyHex: record.outputs[i].scriptPubKeyHex, valueSatoshis: newChangeValue, isChange: true)
+          : record.outputs[i],
+  ];
+  return BumpFeeResult(rawTx, newOutputs);
+}
+
+Uint8List _hexToBytesReversedLocal(String hex) {
+  final bytes = _hexToBytesLocal(hex);
+  return Uint8List.fromList(bytes.reversed.toList());
 }
 
 BigInt _bytesToBigInt(Uint8List bytes) {

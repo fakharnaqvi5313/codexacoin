@@ -15,10 +15,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class WalletStorage {
   static const _mnemonicKey = 'cac_wallet_mnemonic_v1';
   static const _activeNetworkKey = 'cac_wallet_active_network_v1';
+  static const _themeModeKey = 'cac_wallet_theme_mode_v1';
   static const _stakeTokenKey = 'cac_wallet_stake_token_v1';
   static const _addressIndicesKeyPrefix = 'cac_wallet_address_indices_v1_';
   static const _addressBookKey = 'cac_wallet_address_book_v1';
   static const _watchListKey = 'cac_wallet_watch_list_v1';
+  static const _sentTxLogKey = 'cac_wallet_sent_tx_log_v1';
+  static const _seenTxidsKey = 'cac_wallet_seen_txids_v1';
 
   static const _storage = FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -52,6 +55,8 @@ class WalletStorage {
     await _storage.delete(key: '${_addressIndicesKeyPrefix}testnet');
     await _storage.delete(key: _addressBookKey);
     await _storage.delete(key: _watchListKey);
+    await _storage.delete(key: _sentTxLogKey);
+    await _storage.delete(key: _seenTxidsKey);
   }
 
   Future<void> saveActiveNetwork(String networkName) async {
@@ -59,6 +64,15 @@ class WalletStorage {
   }
 
   Future<String?> readActiveNetwork() => _storage.read(key: _activeNetworkKey);
+
+  /// 'system' (the default -- no stored value), 'dark', or 'light'. Not
+  /// secret, kept here for the same reason as everything else in this
+  /// file's "not secret, just bookkeeping" category.
+  Future<void> saveThemeMode(String mode) async {
+    await _storage.write(key: _themeModeKey, value: mode);
+  }
+
+  Future<String?> readThemeMode() => _storage.read(key: _themeModeKey);
 
   /// Every BIP44 index this wallet has generated on this device for
   /// [networkName], not a full gap-limit scan -- see the note on
@@ -108,6 +122,38 @@ class WalletStorage {
     return (jsonDecode(raw) as List)
         .map((e) => (e as Map).cast<String, String>())
         .toList();
+  }
+
+  /// Local-only record of what this wallet itself sent, kept purely so
+  /// "bump fee" can rebuild the exact same transaction later with a
+  /// higher fee -- see wallet_service.dart's bumpFee(). Keyed by txid;
+  /// not secret (no private keys stored, just amounts/scripts/which
+  /// derivation index owns each input), kept here for the same reason
+  /// as everything else in this "bookkeeping, not secret" category.
+  Future<void> saveSentTxLog(Map<String, dynamic> log) async {
+    await _storage.write(key: _sentTxLogKey, value: jsonEncode(log));
+  }
+
+  Future<Map<String, dynamic>> readSentTxLog() async {
+    final raw = await _storage.read(key: _sentTxLogKey);
+    if (raw == null) return {};
+    return (jsonDecode(raw) as Map).cast<String, dynamic>();
+  }
+
+  /// Txids seen as of the last time Home/History was refreshed --
+  /// purely so the next refresh can say "N new since you last checked".
+  /// Updated only from an explicit user action (opening a screen,
+  /// pull-to-refresh), never from a timer -- see
+  /// WalletService.checkForNewTransactions() and
+  /// docs/store-compliance.md's "no periodic tasks of any kind" rule.
+  Future<void> saveSeenTxids(List<String> txids) async {
+    await _storage.write(key: _seenTxidsKey, value: jsonEncode(txids));
+  }
+
+  Future<List<String>> readSeenTxids() async {
+    final raw = await _storage.read(key: _seenTxidsKey);
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<String>();
   }
 
   /// The staking-service auth token (see gateway_api.dart's login/signup).
