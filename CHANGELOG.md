@@ -1344,6 +1344,34 @@ wallets
 
 ---
 
+## Set up (unfunded) PancakeSwap listing infrastructure on BNB Smart Chain
+
+### 2026-08-10
+
+- Third listing venue, after Stellar and Base: a reserve-backed,
+  fixed-supply wrapped BEP-20 (`bnb-issuer/`), mirroring
+  `base-issuer/`'s no-owner/no-mint-function design.
+- Deliberately quoted against USDT rather than BNB/WBNB: an AMM pool
+  only holds the ratio between its two assets fixed, so pooling against
+  a volatile native asset means the token's USD price drifts with that
+  asset's own volatility, unrelated to the token itself. Quoting
+  against USDT removes that -- explicitly documented as *not* making
+  CAC a stablecoin, since its USDT price still floats with actual
+  supply/demand.
+- PancakeSwap V2 Router/Factory/WBNB/USDT addresses verified two
+  independent ways (BscScan, and calling the Router's own
+  `factory()`/`WETH()` view functions over public RPC) before use --
+  caught a wrong remembered Factory address before it could reach a
+  script, and confirmed USDT's decimals are 18 on BSC, not 6 like
+  Ethereum's USDT.
+- Deployer wallet and CAC-chain reserve wallet (`bnb-reserve`)
+  generated; contract compiles. Awaiting funding (CAC to the reserve,
+  BNB for gas, USDT for the pool) before deployment -- see
+  `bnb-issuer/README.md`. Full design rationale in `PARAMETERS.md`
+  section 24.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

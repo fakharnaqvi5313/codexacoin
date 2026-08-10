@@ -2600,3 +2600,90 @@ simulator verification still blocked by the standing iOS Simulator
 issue. Release APK rebuilt and redeployed to
 `codexacoin.com/downloads/CodexaCoin-android.apk` with re-signed
 `SHA256SUMS`; web wallet redeployed to `codexacoin.com/wallet/`.
+
+## 24. PancakeSwap listing via a wrapped BEP-20 on BNB Smart Chain
+(2026-08-10)
+
+Third listing venue, after Stellar (§18) and Base (§19). Set up
+`bnb-issuer/`, mirroring `base-issuer/`'s structure: same fixed-supply,
+no-mint-function BEP-20 pattern, same "generate keys locally, hand
+funding off to the owner" division of labor.
+
+### 24.1 PancakeSwap, not Uniswap, on this chain
+
+Already reasoned through when Base was chosen (§19): BNB Chain was
+ruled out *for a Uniswap listing specifically*, because PancakeSwap is
+the dominant venue there. Listing directly on PancakeSwap is the
+natural fit for this chain, not a reversal of that earlier call.
+
+### 24.2 Quoted in USDT, not BNB -- and why that isn't a stablecoin
+
+The owner's actual goal was for CAC's quoted price to stop moving with
+BNB/ETH's own volatility. The correct mechanism for that is quoting the
+pool against USDT rather than the chain's native asset: a Uniswap/
+PancakeSwap V2 pool only ever holds the *ratio* between its two assets
+fixed (absent trades) -- pool CAC against BNB and CAC's *USD* price
+necessarily drifts with BNB's own USD price, entirely unrelated to
+anything CAC-specific. Pool it against USDT (~$1 by Tether's own
+design) instead, and the pool's ratio *is* CAC's USD price directly.
+
+Explicitly not a stablecoin design, and said so directly to the owner
+before building anything: CAC's USDT price still moves freely with
+actual CAC buying/selling, same as any token. Quoting in USDT removes
+one specific source of unrelated volatility (BNB's own price swings);
+it adds no redemption mechanism, no collateral defense, nothing that
+would make CAC actually price-stable the way USDT itself is. A real
+stablecoin design (reserve sized to circulating supply, an active
+redemption/defense mechanism) was flagged as a separate, much larger
+undertaking the owner would need to decide on deliberately, the same
+way cold-staking and governance were scoped as deliberate future work
+rather than casually built -- see §58's precedent for this project's
+standing approach to that kind of request.
+
+### 24.3 A wrong remembered address, caught by the same two-way check
+
+Continuing the standard from Base (§19: "verified two ways -- BaseScan
+and calling the Router's own view functions"): the PancakeSwap V2
+Router (`0x10ED43C718714eb63d5aA57B78B54704E256024E`) was confirmed via
+BscScan's verified-source label. The Factory and WBNB addresses were
+then obtained by calling the Router's own `factory()`/`WETH()` view
+functions directly over BSC's public RPC (`eth_call`, not read from
+any UI) -- and cross-checked against BscScan afterward. This caught a
+real mistake before it reached any script: a Factory address recalled
+from memory (ending `...fa5556930`) was wrong; the RPC-confirmed real
+one (`0xcA143ce32fe78f1f7019d7d551a6402fc5350c73`) has a different
+ending entirely. Exactly the failure mode this verification method
+exists to catch -- a plausible-looking, confidently "remembered"
+address is not the same as a confirmed one, and this project treats
+that distinction as load-bearing for anything that will hold real
+value. USDT's contract address and decimals (18, not 6 -- unlike
+Ethereum's USDT, a real footgun if assumed rather than checked) were
+confirmed the same way.
+
+### 24.4 Sizing, and a deliberate difference from Base's rollout
+
+Reserve/total supply: 2,000,000 CAC, matching Base exactly -- no
+reason to size a third venue differently from the second, unlike the
+Base-vs-Stellar sizing (which was deliberately smaller for being the
+newer, less-proven venue at the time).
+
+Initial pool liquidity: 25 USDT + 2,000 CAC (at the same $0.0125/CAC
+target price shared with Stellar and Base). Smaller than Base's initial
+$185 pool, at the owner's explicit choice to start thin and add more in
+a few days -- a reasonable plan specifically *because* this wallet
+currently holds the entire available CAC supply, so there's no
+uncoordinated third party who could crash the price by dumping into a
+thin pool while waiting for the top-up. `bnb-issuer/README.md`
+documents that topping up later needs no new deployment or mint -- just
+another `addLiquidity` call with larger amounts, spending CAC already
+sitting in the deployer wallet from the one-time mint.
+
+### 24.5 Status
+
+Deployer wallet (`0x68BCb19e004b5fa6127cb0a1aB28db75f1167F0d`) and CAC
+reserve wallet (`bnb-reserve`, `CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu`)
+both generated -- pure local key generation and on-node wallet
+creation, no funds moved, so done directly rather than handed off.
+Contract compiles cleanly. Awaiting the owner's funding (CAC to the
+reserve wallet, BNB for gas, USDT for the pool) before `deploy.js`/
+`create_pool_and_seed.js` can run -- see `bnb-issuer/README.md`.
