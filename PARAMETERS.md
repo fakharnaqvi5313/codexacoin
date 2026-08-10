@@ -2797,3 +2797,43 @@ matches what actually works, not just a plausible-looking change.
 Watch lists are typically small, so loading balances one at a time
 rather than in parallel has no meaningful UX cost -- the same tradeoff
 already made deliberately for `proof-of-reserve.html` in §24.6.
+
+## 26. Verified the BNB Chain CAC contract's source on BscScan
+(2026-08-10)
+
+§24.6/§25 left one loose end: the disclosure page described the
+contract's source as available in the repo but "not yet separately
+submitted for BscScan's own source verification." That gap is closed.
+
+### 26.1 What was submitted
+
+`bnb-issuer/contracts/CodexaCoinBnb.sol`, via BscScan's "Solidity
+(Single file)" verification flow, using a hardhat-flattened source
+(`npx hardhat flatten`) pasted into the form rather than hand-copied --
+avoids any transcription error against what's actually deployed.
+Compiler settings taken directly from `bnb-issuer/hardhat.config.js`,
+not re-guessed: `v0.8.24+commit.e11b9ed9`, optimizer on with 200 runs,
+MIT license. EVM target left as BscScan's own suggested default for
+this compiler version, which it labeled `paris (default for
+>=0.8.18)` -- matching what Hardhat's build-info recorded it actually
+compiled with. Constructor arguments (ABI-encoded) were auto-populated
+by BscScan from the on-chain creation transaction, not typed in.
+
+Result: BscScan reports **"Exact Match"** against contract
+`0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c` -- not just a matching
+runtime bytecode class, but a byte-for-byte match including metadata.
+
+### 26.2 What this does and doesn't unlock
+
+This is Stage 1 of a two-stage process for getting the CAC logo/info
+added to BscScan's token page. Source verification (this step) is
+public and required no account. Stage 2 -- claiming address ownership
+via BscScan's "Verified Address" flow, which requires signing a
+message with the deployer key -- is the project owner's own action;
+it was not performed here and the deployer's private key
+(`bnb-issuer/secrets.local.txt`) was never read or handled as part of
+this.
+
+`website/legal/proof-of-reserve.html` updated to link the verified
+source directly (`https://bscscan.com/address/0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c#code`)
+instead of describing its unverified status.

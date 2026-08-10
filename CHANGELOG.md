@@ -1423,6 +1423,31 @@ wallets
 
 ---
 
+## Verified the BNB Chain CAC contract's source code on BscScan
+
+### 2026-08-10
+
+- Submitted `bnb-issuer/contracts/CodexaCoinBnb.sol` for BscScan source
+  verification (compiler v0.8.24+commit.e11b9ed9, optimizer on/200 runs,
+  `paris` EVM target, MIT license -- all taken directly from
+  `bnb-issuer/hardhat.config.js`, not re-guessed). BscScan reports an
+  "Exact Match" against the deployed bytecode at
+  `0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c`.
+- This closes the gap flagged in the previous BNB Chain disclosure: the
+  proof-of-reserve page previously said the source was "not yet
+  separately submitted for BscScan's own source verification" while a
+  missing-logo investigation had separately surfaced that an earlier
+  draft of that same page had claimed it *was* verified, before it
+  actually was -- both now resolved together by making the underlying
+  claim true. `website/legal/proof-of-reserve.html` updated to link the
+  verified source directly instead of describing its status.
+- This step (public source verification) is a prerequisite for the
+  project owner's own separate BscScan "Verified Address" ownership
+  claim, which requires signing with the deployer key and was
+  explicitly left to them -- not performed here.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
