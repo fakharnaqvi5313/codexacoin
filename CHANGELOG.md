@@ -1513,6 +1513,23 @@ wallets
 
 ---
 
+## Added a "Buy / Sell CAC" button to the mobile home screen
+
+### 2026-08-10
+
+- New action button on `cac_wallet`'s home screen opens PancakeSwap's
+  own swap UI externally, pre-filled for CAC/USDT, rather than adding
+  any BNB Chain key management or DEX-execution logic to the wallet
+  itself -- picked as the option that doesn't expand what the wallet
+  custodies or is responsible for signing. Uses the same external-link
+  pattern already used for "View on Explorer."
+- Verified the exact URL in a browser first: PancakeSwap's swap page
+  resolves it to "From: USDT (BNB Chain)" / "To: CAC (BNB Chain)"
+  correctly pre-filled, not just that it loads. `flutter analyze` and
+  the full test suite (40 tests) both clean.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

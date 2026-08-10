@@ -2961,3 +2961,49 @@ and confirmed the estimate appeared correctly labeled
 ("PancakeSwap (BNB Chain)"), updated live as the typed amount changed
 (100 CAC -> ~$1.22, then 1000 CAC -> ~$12.22), and cleared correctly
 when the amount field was emptied.
+
+## 30. "Buy / Sell CAC" button on the mobile home screen
+(2026-08-10)
+
+Requested: a way to buy/sell CAC against USDT from inside the mobile
+app. Considered three designs, ranked by how much custody/risk they
+add to the wallet: (a) link out to PancakeSwap's own swap UI, (b) a
+native WalletConnect integration so the wallet talks to the user's
+external MetaMask without leaving the app, (c) a fully embedded EVM
+wallet inside `cac_wallet` that holds its own BSC keys and executes
+PancakeSwap trades directly. Went with (a).
+
+Why not (c): this app's whole signing model is "keys never leave the
+device, minimal custody surface" for the *native* CAC chain. Giving it
+a second, independent BSC keypair plus direct DEX execution (approve/
+swap flows, slippage, gas-in-BNB) is a real scope and risk increase
+that deserves its own design pass, not something to fold in as a side
+feature -- flagged the same way hardware-wallet support and
+cold-staking were flagged earlier as bigger, separate efforts.
+
+Why not (b) yet: WalletConnect is the more "native-feeling" middle
+ground and doesn't add custody either, but it's a real SDK integration
+(session management, EVM tx/calldata construction, cross-app signing
+flow) that can't be meaningfully verified without a live handshake
+against a real external wallet app -- same testability problem
+flagged for hardware wallets. Left as a possible follow-up, not
+attempted here.
+
+### 30.1 Implementation
+
+`cac_wallet/lib/screens/home_screen.dart`: a new full-width action
+button, `Icons.currency_exchange` / "Buy / Sell CAC (PancakeSwap)",
+opens `https://pancakeswap.finance/swap` via `url_launcher`'s
+`LaunchMode.externalApplication` (same pattern already used for
+WatchScreen's "View on Explorer" link) -- not an embedded WebView, so
+the wallet never renders third-party web content in the same process
+that holds its private keys. URL pre-fills `inputCurrency=USDT` /
+`outputCurrency=CAC` (defaults to the buy direction; PancakeSwap's own
+flip button covers selling). A one-line caption under the button makes
+clear this leaves the app and points to the Risk Disclosure.
+
+Verified before considering this done: `flutter analyze` and the full
+test suite (40 tests) both clean; loaded the exact URL in a browser
+and confirmed PancakeSwap's swap page actually resolves it to "From:
+USDT (BNB Chain)" / "To: CAC (BNB Chain)" pre-filled correctly, not
+just that the URL 200s.

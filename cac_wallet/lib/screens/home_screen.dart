@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/wallet_models.dart';
 import '../services/wallet_service.dart';
@@ -16,6 +17,17 @@ import 'send_screen.dart';
 import 'settings_screen.dart';
 import 'staking_screen.dart';
 import 'watch_screen.dart';
+
+// CAC/USDT only trades on BNB Chain (PancakeSwap) -- this app has no BNB
+// Chain key management of its own and isn't taking any on for this. Opens
+// PancakeSwap's own swap UI externally (browser or their app) rather than
+// an embedded WebView, so the wallet never renders third-party web content
+// in the same process that holds its keys. Defaults to buying CAC with
+// USDT; PancakeSwap's own flip button covers the sell direction.
+const _pancakeSwapUrl =
+    'https://pancakeswap.finance/swap'
+    '?inputCurrency=0x55d398326f99059fF775485246999027B3197955'
+    '&outputCurrency=0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,6 +46,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  Future<void> _openPancakeSwap() async {
+    await launchUrl(Uri.parse(_pancakeSwapUrl), mode: LaunchMode.externalApplication);
   }
 
   Future<void> _refresh() async {
@@ -212,6 +228,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
+              icon: Icons.currency_exchange,
+              label: 'Buy / Sell CAC (PancakeSwap)',
+              onTap: _openPancakeSwap,
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Opens PancakeSwap in your browser or wallet app -- you '
+                'connect and trade there, not inside this wallet. Thin '
+                'liquidity; see the Risk Disclosure before trading.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
             ),
           ],
         ),
