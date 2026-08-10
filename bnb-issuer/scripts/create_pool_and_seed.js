@@ -16,11 +16,12 @@
 // demand, same as any token -- it only removes the unrelated BNB
 // volatility.
 //
-// Sizing: 25 USDT (this round's contribution) at the $0.0125/CAC target
-// price shared with the Stellar and Base venues => 2,000 CAC. Both
-// numbers are trivially rescalable for a later top-up (same call,
-// larger amounts) since PancakeSwap's addLiquidity works identically
-// against an existing pair.
+// Sizing: 21.41008673 USDT (this round's actual contribution, confirmed
+// on-chain via the deployer address's USDT balance) at the $0.0125/CAC
+// target price shared with the Stellar and Base venues => 1712.8069384
+// CAC. Both numbers are trivially rescalable for a later top-up (same
+// call, larger amounts) since PancakeSwap's addLiquidity works
+// identically against an existing pair.
 //
 // Router/Factory/USDT addresses below were verified two independent
 // ways before this script was written: BscScan contract-page lookup,
@@ -37,8 +38,8 @@ const ROUTER02_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 // confirmed via decimals() eth_call before this constant was written).
 const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 
-const USDT_AMOUNT = hre.ethers.parseUnits("25", 18);
-const CAC_AMOUNT = hre.ethers.parseUnits("2000", 18); // 25 / 0.0125
+const USDT_AMOUNT = hre.ethers.parseUnits("21.41008673", 18);
+const CAC_AMOUNT = hre.ethers.parseUnits("1712.8069384", 18); // 21.41008673 / 0.0125
 
 const ROUTER_ABI = [
   "function addLiquidity(address tokenA, address tokenB, uint amountADesired, uint amountBDesired, uint amountAMin, uint amountBMin, address to, uint deadline) external returns (uint amountA, uint amountB, uint liquidity)",

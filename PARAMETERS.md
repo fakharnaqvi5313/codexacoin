@@ -2667,16 +2667,19 @@ reason to size a third venue differently from the second, unlike the
 Base-vs-Stellar sizing (which was deliberately smaller for being the
 newer, less-proven venue at the time).
 
-Initial pool liquidity: 25 USDT + 2,000 CAC (at the same $0.0125/CAC
-target price shared with Stellar and Base). Smaller than Base's initial
-$185 pool, at the owner's explicit choice to start thin and add more in
-a few days -- a reasonable plan specifically *because* this wallet
-currently holds the entire available CAC supply, so there's no
-uncoordinated third party who could crash the price by dumping into a
-thin pool while waiting for the top-up. `bnb-issuer/README.md`
-documents that topping up later needs no new deployment or mint -- just
-another `addLiquidity` call with larger amounts, spending CAC already
-sitting in the deployer wallet from the one-time mint.
+Initial pool liquidity: 21.41008673 USDT + 1712.8069384 CAC (at the
+same $0.0125/CAC target price shared with Stellar and Base) -- the
+owner's actual contribution, adjusted down slightly from the
+originally discussed 25 USDT once the real transfer amount was known.
+Smaller than Base's initial $185 pool, at the owner's explicit choice
+to start thin and add more in a few days -- a reasonable plan
+specifically *because* this wallet currently holds the entire
+available CAC supply, so there's no uncoordinated third party who
+could crash the price by dumping into a thin pool while waiting for
+the top-up. `bnb-issuer/README.md` documents that topping up later
+needs no new deployment or mint -- just another `addLiquidity` call
+with larger amounts, spending CAC already sitting in the deployer
+wallet from the one-time mint.
 
 ### 24.5 Status
 
@@ -2684,6 +2687,12 @@ Deployer wallet (`0x68BCb19e004b5fa6127cb0a1aB28db75f1167F0d`) and CAC
 reserve wallet (`bnb-reserve`, `CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu`)
 both generated -- pure local key generation and on-node wallet
 creation, no funds moved, so done directly rather than handed off.
-Contract compiles cleanly. Awaiting the owner's funding (CAC to the
-reserve wallet, BNB for gas, USDT for the pool) before `deploy.js`/
-`create_pool_and_seed.js` can run -- see `bnb-issuer/README.md`.
+Contract compiles cleanly. All three legs of funding now confirmed
+on-chain, independently verified rather than taken on the owner's word:
+2,000,000 CAC to the reserve wallet (txid
+`abe48d829f090ef19585ae8e91a691f20e4d87a147d38d0f9ba764d873ea189b`,
+block 2701), 0.01155907 BNB and 21.41008673 USDT to the deployer
+(both via direct `eth_call`s to BSC's public RPC). `create_pool_and_seed.js`'s
+`USDT_AMOUNT`/`CAC_AMOUNT` updated to match the actual USDT sent.
+Ready for the owner to run `npm run deploy` then `npm run seed-pool` --
+see `bnb-issuer/README.md`.

@@ -40,45 +40,45 @@ fixed supply once, in the constructor, to the deployer. There is no
 owner, no mint function, no admin role at all — provably incapable of
 further issuance from the moment it's deployed.
 
-## Status: awaiting funding (2026-08-10)
+## Status: funded, ready to deploy (2026-08-10)
 
-1. **Reserve wallet created** on the CAC chain:
+1. **Reserve wallet created and funded** on the CAC chain:
    `CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu` (wallet name `bnb-reserve` on
-   the live VPS node). Nothing sent to it yet.
+   the live VPS node). Received exactly 2,000,000 CAC, confirmed
+   on-chain (txid `abe48d829f090ef19585ae8e91a691f20e4d87a147d38d0f9ba764d873ea189b`,
+   block 2701).
 2. **Reserve amount decided**: 2,000,000 CAC, matching the Base reserve
    exactly — no reason to size a third venue differently from the
    second.
-3. **Deployer/distributor wallet generated**:
+3. **Deployer/distributor wallet generated and funded**:
    `0x68BCb19e004b5fa6127cb0a1aB28db75f1167F0d`. Pure local key
    generation, no chain interaction, so this step was done directly
    rather than handed to the owner — same as the Stellar/Base
-   keypairs.
+   keypairs. Holds 0.01155907 BNB (gas) and 21.41008673 USDT (pool
+   contribution), both confirmed via direct `eth_call`s against BSC's
+   public RPC, not just the owner's word.
 4. **Not yet done** (all real value movement — the owner's action, not
    the assistant's, same rule applied throughout this project):
-   - Send 2,000,000 CAC to the `bnb-reserve` address above.
-   - Send a small amount of real BNB to the deployer address above,
-     for gas only (four transactions: deploy, two token approvals, add
-     liquidity — all cheap on BSC, well under $1 total in practice, but
-     send a reasonable buffer since gas can't be predicted exactly in
-     advance).
-   - Send 25 USDT to the deployer address above (this round's pool
-     contribution — see "Initial liquidity" below).
    - Run `npm run deploy` — deploys `CodexaCoinBnb.sol`, minting
      2,000,000 CAC to the deployer.
    - Run `npm run seed-pool` — creates the CAC/USDT PancakeSwap V2 pool
      via Router's `addLiquidity` (auto-creates the pair if it doesn't
-     exist) and seeds it with 25 USDT + 2,000 CAC.
+     exist) and seeds it with 21.41008673 USDT + 1712.8069384 CAC (see
+     "Initial liquidity" below).
 
-## Initial liquidity: 25 USDT + 2,000 CAC
+## Initial liquidity: 21.41008673 USDT + 1712.8069384 CAC
 
 At the shared $0.0125/CAC target price (same peg used for the Base
 pool, chosen to keep every venue implying a consistent CAC valuation —
-see `PARAMETERS.md` section 19), 25 USDT of depth needs 2,000 CAC on
-the other side. This is a deliberately small first deposit: since this
-wallet currently holds the entire circulating CAC supply that's been
-made available anywhere, there's no risk of an uncoordinated market
-crashing the price by dumping into a thin pool — liquidity can be added
-gradually (see "Topping up" below) without that risk changing.
+see `PARAMETERS.md` section 19), 21.41008673 USDT of depth needs
+1712.8069384 CAC on the other side (the owner's actual USDT
+contribution, confirmed on-chain, adjusted down slightly from the
+originally discussed 25 USDT). This is a deliberately small first
+deposit: since this wallet currently holds the entire circulating CAC
+supply that's been made available anywhere, there's no risk of an
+uncoordinated market crashing the price by dumping into a thin pool —
+liquidity can be added gradually (see "Topping up" below) without that
+risk changing.
 
 ## Topping up later
 
