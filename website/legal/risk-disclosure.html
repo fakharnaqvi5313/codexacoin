@@ -22,7 +22,7 @@
 <div class="legal-wrap">
   <a class="legal-back" href="/">← Back to codexacoin.com</a>
   <h1>Risk Disclosure</h1>
-  <p class="legal-meta">Last updated: August 3, 2026</p>
+  <p class="legal-meta">Last updated: August 10, 2026</p>
 
   <nav class="legal-nav">
     <a href="/legal/privacy.html">Privacy Policy</a>
@@ -178,6 +178,49 @@
     yourself rather than taking "backed 1:1" as a bare claim. As with
     everything else on this page: only trade or hold Stellar
     <code>CAC</code> with funds you could afford to lose entirely.
+  </p>
+
+  <h2 id="bnb-iou">11. The BNB Smart Chain <code>CAC</code> token is also an IOU, not native CAC</h2>
+  <p>
+    Same reasoning as §10, on a second chain: the wrapped BEP-20
+    <code>CAC</code> tradeable on PancakeSwap (BNB Smart Chain) is a
+    separate, custodial representation, only worth anything because the
+    project holds real CAC 1:1 in a dedicated reserve wallet. This is a
+    <strong>third, separate custodial liability</strong> from the Stellar
+    one — its own reserve wallet, its own supply, its own risk.
+  </p>
+  <p>
+    One meaningful difference from Stellar: the BEP-20 contract has no
+    owner and no mint function at all, so unlike the Stellar issuer key
+    (§10, not yet locked), it is not technically possible for the project
+    to issue more wrapped <code>CAC</code> than the fixed amount minted
+    once at deployment — that specific risk doesn't apply here. What still
+    does apply:
+  </p>
+  <ul>
+    <li><strong>Reserve wallet security</strong> — the real CAC backing the
+      wrapped token sits in a wallet on the CodexaCoin chain itself,
+      subject to the same key-security considerations as any other
+      wallet.</li>
+    <li><strong>Very thin liquidity</strong> — the initial PancakeSwap pool
+      holds roughly 21 USDT and 1,713 CAC. A pool this small moves a lot on
+      a small trade; don't read the quoted price as a stable or reliable
+      market price the way you might for a deep, established pool.</li>
+    <li><strong>Quoted in USDT, which is not the same as being stable</strong>
+      — the pool is priced against USDT specifically so BNB's own price
+      swings don't bleed into CAC's quoted price. This is not a stablecoin
+      design: CAC's USDT price still moves freely with actual buying and
+      selling of CAC itself, the same as any token. It removes one source
+      of unrelated volatility, nothing more.</li>
+  </ul>
+  <p>
+    A live, independently-checkable comparison of the reserve balance
+    against the issued BNB Chain supply is published at
+    <a href="/legal/proof-of-reserve.html">Proof of Reserve</a> — check it
+    yourself rather than taking "backed 1:1" as a bare claim. As with
+    everything else on this page: only trade or hold wrapped
+    <code>CAC</code> on BNB Chain with funds you could afford to lose
+    entirely.
   </p>
 
   <p style="margin-top:32px">

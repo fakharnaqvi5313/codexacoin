@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Proof of Reserve — CodexaCoin (CAC) on Stellar</title>
+<title>Proof of Reserve — CodexaCoin (CAC)</title>
 <meta name="robots" content="noindex" />
 <link rel="icon" href="/assets/favicon-32.png" />
 <link rel="stylesheet" href="/style.css" />
@@ -21,8 +21,8 @@
 
 <div class="legal-wrap">
   <a class="legal-back" href="/">← Back to codexacoin.com</a>
-  <h1>Proof of Reserve — CAC on Stellar</h1>
-  <p class="legal-meta">Last updated: August 3, 2026</p>
+  <h1>Proof of Reserve — CAC on Stellar &amp; BNB Smart Chain</h1>
+  <p class="legal-meta">Last updated: August 10, 2026</p>
 
   <nav class="legal-nav">
     <a href="/legal/privacy.html">Privacy Policy</a>
@@ -33,13 +33,17 @@
   </nav>
 
   <div class="legal-notice">
-    The <code>CAC</code> asset on Stellar is an IOU, not native CAC — see
+    Both the Stellar <code>CAC</code> asset and the BNB Smart Chain wrapped
+    <code>CAC</code> token are IOUs, not native CAC — see
     <a href="/legal/risk-disclosure.html#stellar-iou">Risk Disclosure §10</a>
-    for what that means. This page exists so that claim is checkable, not
-    just asserted. The two numbers below are fetched live, in your browser,
-    directly from the CAC block explorer and Stellar's own Horizon API — the
+    and <a href="/legal/risk-disclosure.html#bnb-iou">§11</a> for what that
+    means. This page exists so those claims are checkable, not just
+    asserted. Every number below is fetched live, in your browser, directly
+    from the CAC block explorer and each chain's own public API/RPC — the
     same public sources anyone can query themselves.
   </div>
+
+  <h2>CAC on Stellar</h2>
 
   <div class="live-stats por-grid" id="por-stats" aria-live="polite">
     <div class="live-stat">
@@ -57,7 +61,7 @@
   </div>
   <p class="live-stats-note" id="por-note">Loading live figures…</p>
 
-  <h2>1. How this works</h2>
+  <h3>How this works</h3>
   <p>
     <code>CAC</code> on Stellar is issued by a dedicated issuer account and
     held/traded through a separate distributor account. Every unit of
@@ -67,7 +71,7 @@
     <strong>reserve balance ≥ issued supply, always.</strong>
   </p>
 
-  <h2>2. Verify it yourself</h2>
+  <h3>Verify it yourself</h3>
   <p>
     Don't take the numbers above on faith — query the same public sources
     directly:
@@ -91,7 +95,7 @@
       <a href="https://stellar.expert/explorer/public/account/GA3VI7RXW347PRMOYIPKGHODVYJAURJCPYJ2MPCM77ZCHST2BBQOHB3W" target="_blank" rel="noopener">stellar.expert</a>.</li>
   </ul>
 
-  <h2>3. Early trade history was project-seeded, not organic demand</h2>
+  <h3>Early trade history was project-seeded, not organic demand</h3>
   <p>
     On 2026-08-03, the project placed one small round-trip trade on the
     <code>CAC/XLM</code> order book so third-party chart viewers (like
@@ -108,19 +112,73 @@
     specifically so nobody mistakes it for that.
   </p>
 
-  <h2>4. What this is not</h2>
+  <p>
+    The Stellar issuer's signing key has not yet been locked (multisig or
+    master-weight-zero); until it is, the project retains the technical
+    ability to issue more <code>CAC</code> on Stellar than is backed. We
+    haven't done so, and have no plan to, but you should not take that on
+    faith either — that's exactly why this page checks the numbers live
+    rather than describing intentions.
+  </p>
+
+  <h2>CAC on BNB Smart Chain</h2>
+
+  <div class="live-stats por-grid" id="por-bnb-stats" aria-live="polite">
+    <div class="live-stat">
+      <span class="live-stat-label">Real CAC locked in reserve</span>
+      <span class="live-stat-value" id="por-bnb-reserve">—</span>
+    </div>
+    <div class="live-stat">
+      <span class="live-stat-label">Wrapped CAC issued on BNB Chain</span>
+      <span class="live-stat-value" id="por-bnb-issued">—</span>
+    </div>
+    <div class="live-stat">
+      <span class="live-stat-label">Backing status</span>
+      <span class="live-stat-value" id="por-bnb-status">—</span>
+    </div>
+  </div>
+  <p class="live-stats-note" id="por-bnb-note">Loading live figures…</p>
+
+  <h3>How this works</h3>
+  <p>
+    The wrapped BEP-20 <code>CAC</code> on BNB Smart Chain mints its entire
+    fixed supply exactly once, at deployment, to the project's
+    deployer/distributor wallet — there is no owner and no mint function of
+    any kind in the contract, so unlike the Stellar issuer key above, it is
+    <strong>not possible</strong> for the project to issue more of it later,
+    even if it wanted to. The only thing this page checks is that the
+    one-time minted amount was actually backed 1:1 by real CAC locked in a
+    dedicated reserve wallet on the CodexaCoin chain at deploy time, and
+    that it still is.
+  </p>
+
+  <h3>Verify it yourself</h3>
+  <ul>
+    <li><strong>Reserve wallet (real CAC chain)</strong> —
+      <code>CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu</code>. Check it on the
+      <a href="/blockexplorer/#/address/CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu" target="_blank" rel="noopener">CodexaCoin block explorer</a>
+      or query
+      <code>https://codexacoin.com/api/address/CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu</code>
+      directly.</li>
+    <li><strong>Wrapped CAC contract (BNB Smart Chain, BEP-20)</strong> —
+      <code>0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c</code>. View on
+      <a href="https://bscscan.com/token/0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c" target="_blank" rel="noopener">BscScan</a>,
+      including its verified source (no owner, no mint function).</li>
+    <li><strong>CAC/USDT liquidity pool (PancakeSwap V2)</strong> —
+      <code>0x610d052dFAFdBD0F8bA6D37Ec202e58e4Cb7de9a</code>. View on
+      <a href="https://bscscan.com/address/0x610d052dfafdbd0f8ba6d37ec202e58e4cb7de9a" target="_blank" rel="noopener">BscScan</a>.
+      Quoted in USDT rather than BNB specifically so the price doesn't ride
+      BNB's own volatility — this does not make it a stablecoin; see Risk
+      Disclosure §11 for what that distinction does and doesn't mean.</li>
+  </ul>
+
+  <h2>What this is not</h2>
   <p>
     This is not a formal, independently-audited attestation. Nobody outside
     the CodexaCoin project has reviewed this process. It's a self-reported,
-    but independently checkable, comparison of two public on-chain numbers —
-    the same minimum bar any issuer of a reserve-backed asset should clear,
-    not a substitute for real third-party audit. The issuer's Stellar
-    signing key has not yet been locked (multisig or master-weight-zero);
-    until it is, the project retains the technical ability to issue more
-    <code>CAC</code> on Stellar than is backed. We haven't done so, and
-    have no plan to, but you should not take that on faith either — that's
-    exactly why this page checks the numbers live rather than describing
-    intentions.
+    but independently checkable, comparison of two public on-chain numbers
+    per venue — the same minimum bar any issuer of a reserve-backed asset
+    should clear, not a substitute for real third-party audit.
   </p>
 
   <p style="margin-top:32px">
@@ -131,6 +189,8 @@
 <script>
 (function () {
   var fmt = function (n) { return Number(n).toLocaleString('en-US', { maximumFractionDigits: 7 }); };
+
+  // -------------------------------------------------------------- Stellar
   var reserveEl = document.getElementById('por-reserve');
   var issuedEl = document.getElementById('por-issued');
   var statusEl = document.getElementById('por-status');
@@ -155,7 +215,15 @@
     }
   }
 
-  fetch('https://codexacoin.com/api/address/' + reserveAddr)
+  // The explorer's address-lookup endpoint runs a scantxoutset RPC call
+  // against the node, which the node itself only allows one of at a
+  // time -- a second concurrent lookup gets rejected with "Scan already
+  // in progress", not queued. So the two codexacoin.com/api/address/
+  // calls on this page (this one, and the BNB Chain reserve check
+  // below) are deliberately chained one after the other rather than
+  // fired concurrently -- found by testing this page for real, not by
+  // reading the endpoint's code and assuming it'd be fine.
+  var stellarReserveFetch = fetch('https://codexacoin.com/api/address/' + reserveAddr)
     .then(function (r) { return r.json(); })
     .then(function (d) {
       reserveCac = Number(d.balance_satoshis) / 1e8;
@@ -177,6 +245,66 @@
     })
     .catch(function () {
       issuedEl.textContent = 'unavailable';
+    });
+
+  // ------------------------------------------------------------ BNB Chain
+  var bnbReserveEl = document.getElementById('por-bnb-reserve');
+  var bnbIssuedEl = document.getElementById('por-bnb-issued');
+  var bnbStatusEl = document.getElementById('por-bnb-status');
+  var bnbNoteEl = document.getElementById('por-bnb-note');
+
+  var bnbReserveAddr = 'CHW6qSWQZnuA1qxsagHkpgX15oBH3LWzxu';
+  var bnbContract = '0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c';
+
+  var bnbReserveCac = null;
+  var bnbIssuedCac = null;
+
+  function maybeCompareBnb() {
+    if (bnbReserveCac === null || bnbIssuedCac === null) return;
+    if (bnbReserveCac >= bnbIssuedCac) {
+      bnbStatusEl.textContent = 'Fully backed';
+      bnbStatusEl.style.color = 'var(--green)';
+      bnbNoteEl.textContent = 'Reserve covers 100% of issued supply, verified live just now against both chains.';
+    } else {
+      bnbStatusEl.textContent = 'Under-backed';
+      bnbStatusEl.style.color = '#f87171';
+      bnbNoteEl.textContent = 'Reserve does not currently cover issued supply — do not treat wrapped CAC on BNB Chain as fully backed right now.';
+    }
+  }
+
+  // Deliberately started only after the Stellar reserve fetch above
+  // settles (via .finally, so it still runs even if that one failed) --
+  // see the comment on stellarReserveFetch for why these two can't run
+  // concurrently.
+  stellarReserveFetch.finally(function () {
+    fetch('https://codexacoin.com/api/address/' + bnbReserveAddr)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        bnbReserveCac = Number(d.balance_satoshis) / 1e8;
+        bnbReserveEl.textContent = fmt(bnbReserveCac) + ' CAC';
+        maybeCompareBnb();
+      })
+      .catch(function () {
+        bnbReserveEl.textContent = 'unavailable';
+      });
+  });
+
+  // totalSupply() on the BEP-20 contract, called directly over BSC's
+  // public JSON-RPC -- selector 0x18160ddd, no ABI library needed for a
+  // single uint256 return value.
+  fetch('https://bsc-dataseed.binance.org/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: bnbContract, data: '0x18160ddd' }, 'latest'] })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      bnbIssuedCac = Number(BigInt(d.result)) / 1e18;
+      bnbIssuedEl.textContent = fmt(bnbIssuedCac) + ' CAC';
+      maybeCompareBnb();
+    })
+    .catch(function () {
+      bnbIssuedEl.textContent = 'unavailable';
     });
 })();
 </script>

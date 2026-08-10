@@ -2696,3 +2696,50 @@ block 2701), 0.01155907 BNB and 21.41008673 USDT to the deployer
 `USDT_AMOUNT`/`CAC_AMOUNT` updated to match the actual USDT sent.
 Ready for the owner to run `npm run deploy` then `npm run seed-pool` --
 see `bnb-issuer/README.md`.
+
+**Update: live (2026-08-10).** The owner ran both scripts. Independently
+verified on-chain, not just from the scripts' own success output:
+- `CodexaCoinBnb` deployed to `0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c`.
+  `name()`/`symbol()`/`decimals()` return "CodexaCoin"/"CAC"/18 as
+  expected; `totalSupply()` and `balanceOf(deployer)` both read exactly
+  2,000,000 CAC -- the whole mint landed in one place, nowhere else,
+  matching a contract with no mint function.
+- PancakeSwap V2 auto-created the CAC/USDT pair at
+  `0x610d052dFAFdBD0F8bA6D37Ec202e58e4Cb7de9a`. `getReserves()` reads
+  exactly 21.41008673 USDT / 1712.8069384 CAC -- the implied price
+  (21.41008673 / 1712.8069384) is exactly $0.0125/CAC, and the deployer
+  holds all but the standard 1000-wei `MINIMUM_LIQUIDITY` PancakeSwap
+  permanently burns on a pair's first deposit.
+- `website/legal/proof-of-reserve.html` and `risk-disclosure.html`
+  (§11) extended to cover this third venue, matching the Stellar/Base
+  disclosure pattern -- see §24.6 for a real bug this surfaced.
+
+### 24.6 A real concurrency bug the disclosure page surfaced
+
+Adding a second live reserve-vs-issued check to
+`proof-of-reserve.html` (the BNB Chain one, alongside the existing
+Stellar one) initially made the *Stellar* reserve figure render as
+`NaN`, intermittently -- caught by actually loading the page rather
+than just reading the diff. Traced to the explorer's address-lookup
+endpoint (`explorer/app.py`, ~line 178-181): it calls the
+`scantxoutset` RPC, which the node itself only allows one instance of
+at a time -- a second concurrent lookup gets rejected with
+`{"error": "Lookup failed: Scan already in progress..."}` and a 400,
+not queued. The page's two `codexacoin.com/api/address/...` calls
+(Stellar reserve + BNB reserve) fired concurrently and raced; whichever
+lost got the 400, and the resulting `Number(undefined)` produced the
+NaN. Confirmed with a minimal standalone reproduction (two concurrent
+fetches to different addresses on the same endpoint) before touching
+any code, not just assumed from the error message.
+
+Fixed on this page by chaining the two fetches (BNB reserve check
+starts only after the Stellar one settles, via `.finally()`) rather
+than firing them concurrently. This is the same class of bug already
+present in both wallets' watch-only screens (`web-wallet/app.js`'s
+`loadWatch()` and `cac_wallet/lib/screens/watch_screen.dart`'s
+`_load()`), which fire balance lookups for every watched address
+concurrently with no await between them -- anyone watching 2+
+addresses there likely hits the same "Scan already in progress"
+rejection for some of them. Flagged as a separate follow-up rather than
+fixed inline here, since it's a distinct, pre-existing issue in
+already-shipped code, not part of this venue's rollout.

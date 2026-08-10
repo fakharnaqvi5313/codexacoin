@@ -1372,6 +1372,37 @@ wallets
 
 ---
 
+## Take the BNB Smart Chain PancakeSwap listing live; disclose it
+
+### 2026-08-10
+
+- Owner funded and deployed: `CodexaCoinBnb` (fixed-supply, no-owner,
+  no-mint-function BEP-20) live at
+  `0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c`, and a CAC/USDT
+  PancakeSwap V2 pool seeded at
+  `0x610d052dFAFdBD0F8bA6D37Ec202e58e4Cb7de9a` (21.41008673 USDT +
+  1712.8069384 CAC, implying exactly the $0.0125/CAC target price).
+  Every number independently verified on-chain via direct `eth_call`s
+  -- contract metadata, total supply, reserve balances, pool reserves
+  -- not just taken from the deploy scripts' own success output.
+- Extended `website/legal/proof-of-reserve.html` (now covers Stellar
+  and BNB Chain, live-checked in-browser against both chains) and
+  `risk-disclosure.html` (new §11) to disclose this third custodial
+  liability, matching the existing Stellar disclosure pattern.
+- Found and fixed a real bug while building the updated disclosure
+  page: the explorer's address-lookup endpoint uses `scantxoutset`,
+  which the node only allows one of at a time -- firing two concurrent
+  lookups (as the new two-venue page did) made one of them fail with
+  "Scan already in progress," rendering as a silent `NaN`. Fixed by
+  sequencing the two lookups instead of firing them concurrently.
+  Flagged the same underlying issue in both wallets' watch-only screens
+  (which fire lookups for every watched address concurrently) as a
+  separate follow-up, since it's pre-existing, already-shipped code
+  outside this change's scope. Full account in `PARAMETERS.md` section
+  24.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
