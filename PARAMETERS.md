@@ -2837,3 +2837,55 @@ this.
 `website/legal/proof-of-reserve.html` updated to link the verified
 source directly (`https://bscscan.com/address/0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c#code`)
 instead of describing its unverified status.
+
+## 27. BscScan token-info submission, a real logo-size bug found
+along the way, and disclosed CAC/USDT trade history (2026-08-10)
+
+Follow-on from §26: with the source verified, Stage 2 (claiming
+address ownership on BscScan) was the project owner's own action --
+signing a message with the deployer key via MetaMask. Once that
+succeeded, BscScan's "Update Token Info" form was filled out and
+submitted (ticket #840112): project name, official site/email
+(`support@codexacoin.com`, matching the site's domain per BscScan's
+own stated requirement), description, and a 32x32 SVG logo -- BscScan
+requires a *hosted link* to the logo, not a direct upload, so the
+image is committed to the repo
+(`website/assets/cac-logo-32.svg`) and linked via its raw GitHub URL.
+BscScan's confirmation email states no published pricing exists for
+their optional paid tiers (Priority Support, Featured Listing) --
+both are "contact us" inquiry-based, not self-serve, so none was
+pursued.
+
+### 27.1 A real bug found while sourcing the logo
+
+Cropping the site's `website/assets/logo.png` down to a square for
+the BscScan submission surfaced an unrelated, genuine performance bug:
+the `.brand-mark` CSS class renders this image at 32x32px on every
+page (index.html + all 6 legal pages), but the file itself was
+2000x1361px and 2.3MB -- every page load was downloading a 2.3MB image
+to display a 32px icon. Fixed by replacing it with the same centered
+square crop, downsized to 256x256 (118KB, ~19x smaller, 8x the actual
+render size so still sharp on retina). Verified locally before commit:
+renders identically at both the small nav size and the larger
+hero-section size.
+
+### 27.2 CAC/USDT trade history disclosed
+
+At the project owner's request, four small round-trip trades were
+placed against the `CAC/USDT` PancakeSwap pool by the deployer/reserve
+wallet (`0x68BCb19e004b5fa6127cb0a1aB28db75f1167F0d`) trading with
+itself -- same purpose as the earlier Stellar `CAC/XLM` seed trade in
+§18: giving a brand-new pool some chart history rather than a blank
+chart. Two routed through MetaMask's own
+swap aggregator (which took a small separate fee on top of the pool's
+own), two routed directly through PancakeSwap's router. All four were
+independently verified against the transaction receipts before
+disclosing -- confirmed each one emitted genuine `Sync`/`Swap` events
+directly on the CAC/USDT pair contract (not some other pool or a
+no-op), confirmed `status: success`, and cross-checked the implied
+price across all four landed in the same ~0.0121-0.0124 USDT/CAC
+range as the seeded pool price, rather than trusting the reported
+amounts on faith. Disclosed in
+`website/legal/proof-of-reserve.html` with all four tx hashes linked,
+explicitly labeled as project-controlled activity on both sides of
+each trade, not organic demand -- same treatment as the Stellar trade.

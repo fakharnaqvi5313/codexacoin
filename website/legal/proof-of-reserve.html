@@ -179,6 +179,39 @@
       Disclosure §11 for what that distinction does and doesn't mean.</li>
   </ul>
 
+  <h3>Early trade history was project-seeded, not organic demand</h3>
+  <p>
+    On 2026-08-10, the project placed two small round-trip trades against
+    the <code>CAC/USDT</code> pool for the same reason as the Stellar trade
+    below: so third-party chart viewers wouldn't show a completely empty
+    chart for a brand-new pool. Both round trips were the deployer/reserve
+    wallet (<code>0x68BCb19e004b5fa6127cb0a1aB28db75f1167F0d</code>)
+    trading with itself — the only address that has ever held
+    <code>CAC</code> on this chain:
+  </p>
+  <ul>
+    <li>Sold 32 <code>CAC</code> for ~0.39 USDT
+      (<a href="https://bscscan.com/tx/0xe37d4f6991d65e02f9b9d2cec21710bf6406e905ef0090ac75ebcade59ac257d" target="_blank" rel="noopener">tx</a>),
+      then bought ~8.17 <code>CAC</code> back for 0.10 USDT
+      (<a href="https://bscscan.com/tx/0xd845c16610099b16c4a34f9ca51cc4a1e2113052bbbd03fa13a3cda48e6c282f" target="_blank" rel="noopener">tx</a>)
+      — routed through MetaMask's own swap aggregator, which took a small
+      separate fee on top of the pool's.</li>
+    <li>Sold 10 <code>CAC</code> for ~0.12 USDT
+      (<a href="https://bscscan.com/tx/0x0e8cfdd4a82452b273a6295ad671ad730602bc76aa54affa4d96f95816f71e69" target="_blank" rel="noopener">tx</a>),
+      then bought ~12.36 <code>CAC</code> back for 0.15 USDT
+      (<a href="https://bscscan.com/tx/0xd02f3ad4882e5a9948a2862c0053aecab1c4ab6d6025b7ecf2f8e2ac66ee3464" target="_blank" rel="noopener">tx</a>)
+      — routed directly through PancakeSwap's router, no separate
+      aggregator fee.</li>
+  </ul>
+  <p>
+    All four transactions are the same project-controlled wallet on both
+    sides — this is <strong>not</strong> evidence of real buy/sell demand,
+    and you should not treat the resulting PancakeSwap chart activity as a
+    signal that anyone else is trading <code>CAC</code>. We're disclosing
+    it here specifically so nobody mistakes it for that, the same as the
+    Stellar trade below.
+  </p>
+
   <h2>What this is not</h2>
   <p>
     This is not a formal, independently-audited attestation. Nobody outside

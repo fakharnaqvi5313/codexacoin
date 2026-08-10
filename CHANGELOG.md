@@ -1448,6 +1448,35 @@ wallets
 
 ---
 
+## Submitted BscScan token info, fixed a real logo-size bug, disclosed CAC/USDT trade history
+
+### 2026-08-10
+
+- With BscScan source verification (previous entry) and the project
+  owner's own ownership claim both done, submitted BscScan's "Update
+  Token Info" form (ticket #840112): official site/email, description,
+  and a 32x32 SVG logo hosted at
+  `website/assets/cac-logo-32.svg` (BscScan requires a link, not a
+  direct upload).
+- Cropping the logo for that submission surfaced an unrelated real bug:
+  `website/assets/logo.png` was 2000x1361px / 2.3MB despite being
+  rendered at 32x32px by CSS on every page -- fixed by replacing it
+  with the same square crop, downsized to 256x256 (118KB, ~19x
+  smaller). Verified locally before committing.
+- Disclosed four small CAC/USDT PancakeSwap round-trip trades (same
+  deployer/reserve wallet on both sides of each) in
+  `website/legal/proof-of-reserve.html`, same treatment as the earlier
+  Stellar CAC/XLM seed trade -- all four tx hashes independently
+  verified against their on-chain receipts (confirmed real `Sync`/
+  `Swap` events on the actual pool contract, confirmed success,
+  cross-checked implied price) before writing up the disclosure,
+  rather than taking the reported amounts on faith.
+- BscScan's confirmation email noted their paid Priority Support and
+  Featured Listing tiers have no published pricing (inquiry-only) --
+  researched and reported honestly rather than guessing a number.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
