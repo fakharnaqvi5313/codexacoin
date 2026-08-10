@@ -1175,16 +1175,21 @@ async function loadWatch() {
       window.open(`https://codexacoin.com/blockexplorer/#/address/${address}`, "_blank", "noopener");
     });
   });
-  entries.forEach(async (e, i) => {
+  // Sequential, not Promise.all/forEach-with-async -- the explorer's
+  // balance lookup runs a scantxoutset RPC, which the node only allows
+  // one of at a time. Firing these concurrently made the loser of the
+  // race fail with "Scan already in progress" and show a false
+  // "Could not fetch balance" for an address that was actually fine.
+  for (let i = 0; i < entries.length; i++) {
     const el = document.getElementById(`watch-balance-${i}`);
     try {
-      const balance = await state.gateway.balance(e.address);
+      const balance = await state.gateway.balance(entries[i].address);
       const total = BigInt(balance.confirmed) + BigInt(balance.unconfirmed);
       el.textContent = `${formatCac(total)} CAC`;
     } catch (err) {
       el.textContent = "Could not fetch balance";
     }
-  });
+  }
 }
 document.getElementById("btn-show-xpub").addEventListener("click", async () => {
   const btn = document.getElementById("btn-show-xpub");

@@ -2734,12 +2734,66 @@ any code, not just assumed from the error message.
 
 Fixed on this page by chaining the two fetches (BNB reserve check
 starts only after the Stellar one settles, via `.finally()`) rather
-than firing them concurrently. This is the same class of bug already
-present in both wallets' watch-only screens (`web-wallet/app.js`'s
-`loadWatch()` and `cac_wallet/lib/screens/watch_screen.dart`'s
-`_load()`), which fire balance lookups for every watched address
-concurrently with no await between them -- anyone watching 2+
-addresses there likely hits the same "Scan already in progress"
-rejection for some of them. Flagged as a separate follow-up rather than
-fixed inline here, since it's a distinct, pre-existing issue in
-already-shipped code, not part of this venue's rollout.
+than firing them concurrently. Both wallets' watch-only screens
+(`web-wallet/app.js`'s `loadWatch()` and `cac_wallet/lib/screens/
+watch_screen.dart`'s `_load()`) had the same shape of bug -- balance
+lookups fired for every watched address concurrently, no await between
+them -- but **not** the identical mechanism; see §25, which corrects
+the initial assumption here that it was the same `scantxoutset` error
+before actually testing that code path.
+
+## 25. Fixed a real concurrency bug in both wallets' watch-only
+balance lookups -- and corrected an earlier wrong guess about it
+(2026-08-10)
+
+§24.6 flagged the watch-only screens' concurrent balance lookups as
+"the same class of bug" as the disclosure page's `scantxoutset`
+conflict, assuming the identical `{"error": "Lookup failed: Scan
+already in progress..."}` 400 would occur. That assumption turned out
+to be wrong once actually tested against the real code path, and it's
+worth recording the correction rather than letting the earlier guess
+stand uncorrected.
+
+### 25.1 The watch-only screens hit a different bug entirely
+
+`web-wallet`/`cac_wallet`'s watch-only balance check calls
+`vps-gateway`'s `/v1/address/<address>/balance` (via `Gateway.balance`/
+`WalletService.gateway.balance`), not the explorer's `/api/address/...`
+endpoint the disclosure page uses -- two entirely separate backend
+services. `vps-gateway`'s endpoint uses `listunspent` against a shared
+watch-only wallet, not `scantxoutset` at all; concurrent `listunspent`
+calls are ordinarily fine. The actual exclusive resource is
+`ensure_address_watched()` (`vps-gateway/app.py` ~line 120): the first
+time any address is looked up, it calls `importdescriptors` with
+`timestamp: 0` (a full rescan from genesis) to backfill that address's
+history into the watch wallet.
+
+Confirmed directly against the live gateway, not assumed: two brand-new
+(never-before-seen) addresses, looked up concurrently, produced a
+**500 Internal Server Error** for one of them -- a different failure
+mode than the explorer's clean 400. The same two lookups run
+sequentially both succeeded cleanly. The 500 (an unhandled exception,
+not a validated error response) suggests two concurrent
+genesis-rescan-triggering `importdescriptors` calls against the same
+shared wallet raced in a way `vps-gateway`'s error handling doesn't
+catch -- worth a closer look at `ensure_address_watched`'s
+check-then-import pattern if this recurs, but out of scope to chase
+further here since the client-side fix (below) avoids triggering it at
+all.
+
+### 25.2 Fix
+
+Both `loadWatch()` (`web-wallet/app.js`) and `_load()`
+(`cac_wallet/lib/screens/watch_screen.dart`) now fetch each watched
+address's balance sequentially (a plain `for` loop with `await`, not
+`Array.forEach` with an async callback on web, and an explicit `await`
+on each call on mobile) instead of firing them all at once. Verified
+by reproducing the failure with two fresh throwaway addresses fired
+concurrently against the live gateway (500 on one), then confirming
+the same two addresses looked up sequentially both succeed -- the fix
+matches what actually works, not just a plausible-looking change.
+`flutter analyze`: clean.
+
+Watch lists are typically small, so loading balances one at a time
+rather than in parallel has no meaningful UX cost -- the same tradeoff
+already made deliberately for `proof-of-reserve.html` in §24.6.

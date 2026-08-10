@@ -42,8 +42,13 @@ class _WatchScreenState extends State<WatchScreen> {
     final entries = await wallet.loadWatchList();
     if (!mounted) return;
     setState(() => _entries = entries);
+    // Sequential, not fire-and-forget -- the gateway's balance lookup
+    // runs a scantxoutset RPC, which the node only allows one of at a
+    // time. Firing these concurrently made the loser of the race fail
+    // with "Scan already in progress" and show a false "Could not
+    // fetch balance" for an address that was actually fine.
     for (var i = 0; i < entries.length; i++) {
-      _fetchBalance(i, entries[i]['address']!);
+      await _fetchBalance(i, entries[i]['address']!);
     }
   }
 

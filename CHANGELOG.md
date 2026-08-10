@@ -1403,6 +1403,26 @@ wallets
 
 ---
 
+## Fixed a real concurrency bug in both wallets' watch-only balance lookups
+
+### 2026-08-10
+
+- Both wallets' watch-only screens fired a balance lookup for every
+  watched address concurrently (no `await` between them). Fixed to
+  fetch sequentially instead, on both web (`loadWatch()`) and mobile
+  (`WatchScreen._load()`).
+- The earlier note in this changelog (previous entry, taking BNB Chain
+  live) guessed this was the same `scantxoutset` "Scan already in
+  progress" bug the disclosure page hit. That guess was wrong: the
+  watch-only screens go through a different backend service
+  (`vps-gateway`, not the explorer) with a different failure mode --
+  confirmed directly against the live gateway (two brand-new addresses
+  looked up concurrently produced a 500 on one of them; the same two
+  looked up sequentially both succeeded). Corrected in `PARAMETERS.md`
+  section 25 rather than left standing.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
