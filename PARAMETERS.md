@@ -2916,3 +2916,48 @@ correct: `flutter analyze` and the full Flutter test suite (40 tests)
 both clean; loaded `price.js` directly in a browser against the real
 GeckoTerminal endpoint and confirmed it returns the live pool price
 with `source: "bnb"` as expected, not just that it compiles.
+
+## 29. Added a live USD estimate to the Send amount field
+(2026-08-10)
+
+Follow-on from §28: the same price source now surfaces at the point
+it's actually useful -- while entering how much to send, not just on
+the home balance.
+
+### 29.1 Design: fetch once per screen visit, not per keystroke
+
+Neither wallet had any existing debounce pattern to reuse (checked
+before inventing one). Rather than debounce a network call per
+keystroke, the price is fetched once when the Send screen opens
+(`loadSendAmountFiat` in web-wallet's `showScreen`; `initState` in
+`SendScreen`) and cached locally -- every keystroke after that just
+multiplies the cached `usdPerCac` against the typed amount, no
+further network calls. Matches the reasoning already used for
+`FiatPlaceholder` on the mobile home screen, made explicit here as a
+`sendScreenPrice` module variable (JS) / `_price` field (Dart) rather
+than re-fetching blindly.
+
+### 29.2 Implementation
+
+- `web-wallet/index.html`: added `<p id="send-amount-fiat">` under the
+  amount input. `web-wallet/app.js`: `send-amount` gets its first-ever
+  `input` listener (previously the field was only read once, at submit
+  time); `updateSendAmountFiat` recomputes and displays the estimate,
+  showing nothing for an empty/invalid amount rather than a stale or
+  zero value.
+- `cac_wallet/lib/screens/send_screen.dart`: added a `CacPrice? _price`
+  field, fetched in a new `initState`; a listener on `_amountController`
+  triggers rebuilds so a `Builder` under the amount `TextField` can
+  recompute the estimate from the controller's current text on every
+  keystroke.
+- Same disclaimer/source-labeling convention as §28's home-balance
+  display in both: `~$X.XX (estimated -- thin <source> liquidity, not
+  a reliable market price)`.
+
+Verified, not just written: `flutter analyze` and the full test suite
+(40 tests) both clean. For web-wallet, created a real (throwaway,
+never funded) wallet in-browser, navigated to Send, typed an amount,
+and confirmed the estimate appeared correctly labeled
+("PancakeSwap (BNB Chain)"), updated live as the typed amount changed
+(100 CAC -> ~$1.22, then 1000 CAC -> ~$12.22), and cleared correctly
+when the amount field was emptied.

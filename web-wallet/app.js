@@ -119,7 +119,7 @@ function showScreen(name) {
   document.getElementById(`screen-${name}`).classList.add("active");
   document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b.dataset.screen === name));
   if (name === "home") loadHome();
-  if (name === "send") loadAddressBook();
+  if (name === "send") { loadAddressBook(); loadSendAmountFiat(); }
   if (name === "receive") loadReceive();
   if (name === "history") loadHistory();
   if (name === "staking") loadStaking();
@@ -580,6 +580,29 @@ async function refreshReceiveQr() {
   await qr.renderQr(document.getElementById("receive-qr"), uri);
 }
 document.getElementById("receive-request-amount").addEventListener("input", refreshReceiveQr);
+
+// Fetched once when the send screen opens, then just multiplied locally
+// on every keystroke -- no point re-hitting the price API per character
+// typed. Re-fetches fresh each time the screen is opened (loadSendAmountFiat
+// is called from showScreen), so a stale price from an earlier visit never
+// lingers.
+let sendScreenPrice = null;
+async function loadSendAmountFiat() {
+  sendScreenPrice = await fetchCacUsdPrice();
+  updateSendAmountFiat();
+}
+function updateSendAmountFiat() {
+  const el = document.getElementById("send-amount-fiat");
+  const amount = parseFloat(document.getElementById("send-amount").value);
+  if (!sendScreenPrice || !(amount > 0)) {
+    el.textContent = "";
+    return;
+  }
+  const usdValue = amount * sendScreenPrice.usdPerCac;
+  const sourceLabel = sendScreenPrice.source === "bnb" ? "PancakeSwap (BNB Chain)" : "Stellar DEX";
+  el.textContent = `~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- thin ${sourceLabel} liquidity, not a reliable market price)`;
+}
+document.getElementById("send-amount").addEventListener("input", updateSendAmountFiat);
 document.getElementById("btn-view-on-explorer").addEventListener("click", () => {
   window.open(`https://codexacoin.com/blockexplorer/#/address/${activeAddress()}`, "_blank", "noopener");
 });

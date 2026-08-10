@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../crypto/transaction.dart' as tx;
 import '../services/bip21.dart';
+import '../services/price_service.dart';
 import '../services/wallet_service.dart';
 import 'qr_scan_screen.dart';
 
@@ -26,6 +27,23 @@ class _SendScreenState extends State<SendScreen> {
   bool _sending = false;
   String? _error;
   String? _txid;
+
+  // Fetched once per screen visit, then just multiplied locally against
+  // whatever's typed -- no point re-hitting the price API per keystroke.
+  CacPrice? _price;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCacUsdPrice().then((p) {
+      if (mounted) setState(() => _price = p);
+    });
+    // Rebuilds on every keystroke so the fiat estimate below the amount
+    // field stays current -- setState with no controller-derived state
+    // change is fine here since build() reads straight from the
+    // controller's current text.
+    _amountController.addListener(() => setState(() {}));
+  }
 
   Future<void> _scanQr() async {
     final result = await Navigator.of(context).push<String>(
@@ -170,6 +188,22 @@ class _SendScreenState extends State<SendScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
+            Builder(builder: (context) {
+              final amount = double.tryParse(_amountController.text.trim());
+              if (_price == null || amount == null || amount <= 0) {
+                return const SizedBox.shrink();
+              }
+              final usdValue = amount * _price!.usdPerCac;
+              final sourceLabel =
+                  _price!.source == CacPriceSource.bnb ? 'PancakeSwap (BNB Chain)' : 'Stellar DEX';
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '~\$${usdValue.toStringAsFixed(2)} (estimated -- thin $sourceLabel liquidity, not a reliable market price)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                ),
+              );
+            }),
             const SizedBox(height: 24),
             if (_error != null) Padding(
               padding: const EdgeInsets.only(bottom: 16),

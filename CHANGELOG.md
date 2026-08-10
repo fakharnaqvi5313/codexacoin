@@ -1495,6 +1495,24 @@ wallets
 
 ---
 
+## Added a live USD estimate to the Send amount field
+
+### 2026-08-10
+
+- Both wallets' Send screens now show a live "~$X.XX estimated"
+  value under the amount field as you type, using the same price
+  source as the home balance (previous entry). Fetches the price once
+  per screen visit rather than per keystroke -- every keystroke after
+  that is a local multiplication, no repeated API calls.
+- Verified in-browser for web-wallet: created a real (throwaway)
+  wallet, typed an amount on the Send screen, and confirmed the
+  estimate appeared with the correct source label, updated live as
+  the amount changed, and cleared correctly when the field was
+  emptied. `flutter analyze` and the full test suite (40 tests) clean
+  for the mobile side.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
