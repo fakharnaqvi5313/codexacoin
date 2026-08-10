@@ -1,21 +1,37 @@
-// Best-effort CAC/USD price estimate, computed from two independent
-// public sources -- no CodexaCoin-operated price feed exists (there
-// isn't one to operate; see PARAMETERS.md section 18 for why Stellar is
-// the only place CAC currently trades at all):
+// Best-effort CAC/USD price estimate -- no CodexaCoin-operated price feed
+// exists (there isn't one to operate). Tries two independent public
+// sources, in order:
 //
-//   1. CAC/XLM from the last real trade on Stellar's DEX (Horizon's
-//      /trades endpoint) -- not the order book, since a resting offer
-//      isn't a price anyone has actually paid.
-//   2. XLM/USD from CoinGecko's public API.
+//   1. BNB Chain: the CAC/USDT PancakeSwap pool's own reserve-ratio price,
+//      via GeckoTerminal's public API (PARAMETERS.md section 27.2).
+//   2. Stellar: CAC/XLM from the last real trade on Stellar's DEX
+//      (Horizon's /trades endpoint, not the order book -- a resting offer
+//      isn't a price anyone has actually paid), converted to USD via
+//      CoinGecko.
 //
-// This is explicitly NOT a reliable market price: as of writing, the
-// only trades that have ever happened on this pair are the two
-// project-seeded ones disclosed in proof-of-reserve.html. Callers must
-// surface that thinness, not present this as a confident number --
-// see how home's balance display labels it.
+// Neither is a reliable market price: as of writing, every trade that has
+// ever happened on either pair is a project-seeded one, disclosed in
+// proof-of-reserve.html. Callers must surface that thinness per the
+// returned `source`, not present this as a confident number -- see how
+// home's balance display labels it.
 const CAC_ISSUER = "GDFWAGH7DX43XFIGRRCJHIQCJTPP3TTZXTXOJMLAAFV6U2AM7W3L2K4Y";
+const BNB_POOL_ADDRESS = "0x610d052dfafdbd0f8ba6d37ec202e58e4cb7de9a";
 
-export async function fetchCacUsdPrice() {
+async function fetchBnbPoolPrice() {
+  try {
+    const resp = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${BNB_POOL_ADDRESS}`
+    );
+    const json = await resp.json();
+    const usdPerCac = Number(json?.data?.attributes?.base_token_price_usd);
+    if (!usdPerCac || !isFinite(usdPerCac)) return null;
+    return { usdPerCac, source: "bnb", tradeTime: null };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchStellarPrice() {
   try {
     const [tradesResp, xlmPriceResp] = await Promise.all([
       fetch(
@@ -32,8 +48,16 @@ export async function fetchCacUsdPrice() {
     const usdPerXlm = xlmPriceJson?.stellar?.usd;
     if (!usdPerXlm) return null;
 
-    return { usdPerCac: xlmPerCac * usdPerXlm, tradeTime: record.ledger_close_time };
+    return {
+      usdPerCac: xlmPerCac * usdPerXlm,
+      source: "stellar",
+      tradeTime: record.ledger_close_time,
+    };
   } catch (e) {
     return null;
   }
+}
+
+export async function fetchCacUsdPrice() {
+  return (await fetchBnbPoolPrice()) || (await fetchStellarPrice());
 }

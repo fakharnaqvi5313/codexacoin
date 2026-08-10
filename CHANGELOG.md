@@ -1477,6 +1477,24 @@ wallets
 
 ---
 
+## Added the BNB Chain price source to both wallets' live price display
+
+### 2026-08-10
+
+- `web-wallet/price.js` and `cac_wallet/lib/services/price_service.dart`
+  previously only checked Stellar's DEX for CAC's price. Extended both
+  to also try the CAC/USDT PancakeSwap pool via GeckoTerminal's API
+  first (falling back to Stellar), and to label the on-screen
+  disclaimer with whichever source actually answered rather than
+  hardcoding "Stellar DEX" -- both remain honest that this is thin,
+  project-seeded liquidity, not a reliable market price.
+- Verified, not just written: `flutter analyze` and the full test
+  suite (40 tests) both clean, and `price.js` loaded directly in a
+  browser against the live GeckoTerminal endpoint to confirm it
+  actually returns the real pool price with the correct source label.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

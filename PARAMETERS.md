@@ -2889,3 +2889,30 @@ amounts on faith. Disclosed in
 `website/legal/proof-of-reserve.html` with all four tx hashes linked,
 explicitly labeled as project-controlled activity on both sides of
 each trade, not organic demand -- same treatment as the Stellar trade.
+
+## 28. Added the BNB Chain price source to both wallets' price display
+(2026-08-10)
+
+`web-wallet/price.js` and `cac_wallet/lib/services/price_service.dart`
+(§81 of the phased build) only had one price source: the last real
+trade on Stellar's DEX. Now that CAC also trades on PancakeSwap and
+that pool is indexed by GeckoTerminal's public API (§27.2), both were
+extended to try the BNB Chain pool's own reserve-ratio price first,
+falling back to the Stellar calculation if that's unreachable.
+
+Both implementations now return which source was actually used
+(`source: 'bnb'|'stellar'` in JS; a `CacPriceSource` enum in Dart), and
+both UI display sites (`web-wallet/app.js`'s `loadFiatValue`,
+`cac_wallet`'s `FiatPlaceholder`) use it to label the disclaimer
+correctly -- "thin PancakeSwap (BNB Chain) liquidity" vs "thin Stellar
+DEX liquidity" -- rather than hardcoding one source's name when the
+number might have come from the other. The underlying honesty framing
+carries over unchanged: this still isn't presented as a reliable
+market price, since every trade on both pairs so far is project-seeded
+(§18, §27.2), not organic.
+
+Verified before considering this done, not just written and assumed
+correct: `flutter analyze` and the full Flutter test suite (40 tests)
+both clean; loaded `price.js` directly in a browser against the real
+GeckoTerminal endpoint and confirmed it returns the live pool price
+with `source: "bnb"` as expected, not just that it compiles.

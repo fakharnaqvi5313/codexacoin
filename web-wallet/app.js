@@ -306,7 +306,8 @@ async function loadFiatValue(totalSatoshis) {
   if (!price) return;
   const cacAmount = Number(formatCac(totalSatoshis));
   const usdValue = cacAmount * price.usdPerCac;
-  el.textContent = `~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- based on thin Stellar DEX liquidity, not a reliable market price)`;
+  const sourceLabel = price.source === "bnb" ? "PancakeSwap (BNB Chain)" : "Stellar DEX";
+  el.textContent = `~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- based on thin ${sourceLabel} liquidity, not a reliable market price)`;
 }
 
 // -------------------------------------------------------------------- send

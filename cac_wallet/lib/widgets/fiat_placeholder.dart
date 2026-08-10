@@ -2,9 +2,10 @@
 /// placeholder for most of this project's life because no price for CAC
 /// existed anywhere -- see docs/store-compliance.md's note on not
 /// misleading users about values the app doesn't actually have. That's
-/// no longer true now that CAC trades (thinly) on Stellar's DEX, so this
-/// fetches a real, sourced number -- but stays honest about how thin
-/// that source is rather than presenting it as a confident market price.
+/// no longer true now that CAC trades (thinly) on Stellar's DEX and on
+/// PancakeSwap (BNB Chain), so this fetches a real, sourced number --
+/// but stays honest about how thin that source is rather than
+/// presenting it as a confident market price.
 library;
 
 import 'package:flutter/material.dart';
@@ -37,8 +38,9 @@ class _FiatPlaceholderState extends State<FiatPlaceholder> {
     if (!_loaded) return Text('Fetching estimated value...', style: style);
     if (_price == null) return Text('Fiat value unavailable', style: style);
     final usdValue = widget.cacAmount * _price!.usdPerCac;
+    final sourceLabel = _price!.source == CacPriceSource.bnb ? 'PancakeSwap (BNB Chain)' : 'Stellar DEX';
     return Text(
-      '~\$${usdValue.toStringAsFixed(2)} (estimated -- thin Stellar DEX liquidity, not a reliable market price)',
+      '~\$${usdValue.toStringAsFixed(2)} (estimated -- thin $sourceLabel liquidity, not a reliable market price)',
       style: style,
       textAlign: TextAlign.center,
     );
