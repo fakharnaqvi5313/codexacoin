@@ -16,6 +16,7 @@ import 'receive_screen.dart';
 import 'send_screen.dart';
 import 'settings_screen.dart';
 import 'staking_screen.dart';
+import 'wallet_connect_swap_screen.dart';
 import 'watch_screen.dart';
 
 // CAC/USDT only trades on BNB Chain (PancakeSwap) -- this app has no BNB
@@ -241,6 +242,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Opens PancakeSwap in your browser or wallet app -- you '
                 'connect and trade there, not inside this wallet. Thin '
                 'liquidity; see the Risk Disclosure before trading.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Connect Wallet & Swap (WalletConnect)',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const WalletConnectSwapScreen()),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Pairs with your own wallet app over WalletConnect so it can '
+                'submit the swap for you -- still no keys held here. An '
+                'alternative to the button above, not a replacement for it.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: Colors.grey),
               ),

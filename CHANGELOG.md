@@ -1530,6 +1530,41 @@ wallets
 
 ---
 
+## Added WalletConnect swap to the mobile wallet
+
+### 2026-08-11
+
+- New "Connect Wallet & Swap (WalletConnect)" screen in `cac_wallet`,
+  alongside (not replacing) the external-link "Buy / Sell CAC" button.
+  Pairs with the user's own external wallet app (MetaMask, Trust
+  Wallet, etc.) via Reown AppKit, restricted to a BSC-only required
+  namespace, and drives a PancakeSwap CAC<->USDT swap through it --
+  the wallet still never holds a BSC key or signs anything itself;
+  every transaction is built as unsigned calldata here and signed in
+  the connected wallet app.
+- New pure ABI-encoding module (`lib/services/pancake_swap.dart`) for
+  the PancakeSwap Router calldata, decimal amount parsing/formatting,
+  and slippage math -- fully unit-tested (15 new tests) without
+  needing a live connection.
+- Found and fixed a real Android toolchain conflict along the way:
+  `reown_appkit` pulls in `appcheck` (wallet-detection) and
+  `coinbase_wallet_sdk`, both of which needed newer Kotlin/AGP/minSdk
+  than this project is pinned to. Pinned `appcheck` to the last
+  release on the older toolchain rather than bumping the whole
+  project's Kotlin/AGP/Gradle for it, and raised `minSdkVersion` from
+  21 to 23 (Android 6.0) for `coinbase_wallet_sdk`'s requirement.
+- Every BSC address involved (PancakeSwap Router, CAC, USDT) was
+  re-verified against BscScan before use rather than trusted from
+  memory -- worth calling out because a first recollection of the
+  router address was in fact wrong (39 hex characters, not 40).
+- `flutter analyze` and the full test suite (55 tests) clean; a real
+  `flutter build apk --release` succeeds. Not verified in this
+  environment: an actual WalletConnect pairing handshake or a real
+  signed swap against a live external wallet -- needs real-device
+  testing. See PARAMETERS.md section 31 for the full write-up.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

@@ -3007,3 +3007,130 @@ test suite (40 tests) both clean; loaded the exact URL in a browser
 and confirmed PancakeSwap's swap page actually resolves it to "From:
 USDT (BNB Chain)" / "To: CAC (BNB Chain)" pre-filled correctly, not
 just that the URL 200s.
+
+## 31. WalletConnect swap (option "b" from section 30, built as a
+follow-up) (2026-08-11)
+
+Requested as an explicit follow-up to section 30: option (b), a native
+WalletConnect integration, so the wallet can drive a PancakeSwap trade
+through the user's own external wallet app without leaving `cac_wallet`.
+Added alongside the section-30 button, not instead of it -- the simpler
+external link stays as the lower-effort fallback.
+
+Custody model is unchanged from section 30's reasoning: `cac_wallet`
+still never holds a BSC private key and never signs anything itself.
+Every transaction (an ERC-20 `approve`, then the swap) is built here as
+unsigned calldata, handed to the connected external wallet over
+WalletConnect, and signed and broadcast entirely there. This app only
+ever sees the resulting request/response round-trip.
+
+### 31.1 Why WalletConnect needed a Reown Cloud project ID
+
+The current (2026) Flutter SDK for the dApp side of WalletConnect is
+`reown_appkit` (Reown is the WalletConnect protocol's rebrand; the
+older `walletconnect_flutter_v2`/`web3modal_flutter` packages are
+deprecated). It requires a project ID from a free Reown Cloud account
+to talk to the relay at all. This is a public identifier, not a
+secret -- safe to embed in source, unlike an API key -- but creating
+the account itself was something this assistant is not able to do on
+the user's behalf; the user created the account and provided the
+project ID directly.
+
+### 31.2 Addresses verified before use, not recalled from memory
+
+Every BSC contract address this feature touches was checked against
+BscScan or an equivalent authoritative source before being hardcoded,
+following the same discipline used earlier in the project for on-chain
+contract verification:
+
+- PancakeSwap V2 Router `0x10ED43C718714eb63d5aA57B78B54704E256024E`
+  -- confirmed via BscScan as a source-verified "PancakeRouter"
+  contract tagged "PancakeSwap: Router v2". (A first recollection of
+  this address from memory was checked and turned out to be malformed
+  -- 39 hex characters instead of 40 -- which is exactly why this
+  verification step exists rather than being skipped.)
+- CAC BEP-20 `0xd9bac2e48E090d42E5E71193D23e8efAAF9a054c` and USDT (BSC)
+  `0x55d398326f99059fF775485246999027B3197955` -- already-established
+  addresses from this project's own BNB deployment (see
+  `bnb-issuer/deployed.json`); re-checked for well-formedness here.
+- Both CAC (`bnb-issuer/contracts/CodexaCoinBnb.sol`, a stock
+  unmodified OpenZeppelin `ERC20`) and USDT-on-BSC use 18 decimals --
+  confirmed for USDT specifically via its BscScan token page, since
+  Ethereum-mainnet USDT's 6-decimal convention does not carry over to
+  BSC and a wrong assumption here would silently mis-scale every trade
+  by 12 orders of magnitude.
+
+### 31.3 Implementation
+
+`cac_wallet/lib/services/pancake_swap.dart` -- pure ABI-encoding
+module, no network calls or key handling: builds `approve(...)`,
+`swapExactTokensForTokens(...)`, and `getAmountsOut(...)` calldata via
+`web3dart`'s ABI types, plus decimal-string <-> smallest-unit
+conversion (`parseTokenAmount`/`formatTokenAmount`, avoiding
+floating-point amount bugs) and slippage math (`applySlippage`). Fully
+unit-testable without any live connection; its tests assert the
+encoded calldata starts with the correct 4-byte function selector for
+each call, which doubles as a self-check that the ABI signatures are
+right.
+
+`cac_wallet/lib/screens/wallet_connect_swap_screen.dart` -- new
+screen, reachable from a second home-screen button ("Connect Wallet &
+Swap (WalletConnect)"). Creates a `ReownAppKitModal` scoped to a
+BSC-only required namespace (`eip155:56`, `MethodsConstants
+.requiredMethods`, `EventsConstants.requiredEvents`), shows Reown's
+own `AppKitModalConnectButton`/`AppKitModalAccountButton` widgets for
+connect/disconnect, lets the user pick a direction (USDT->CAC or
+CAC->USDT) and an amount, fetches a live on-chain quote via a
+read-only `getAmountsOut` call against the public
+`bsc-dataseed.binance.org` RPC (no wallet interaction needed for a
+quote), and on confirmation sends two separate
+`eth_sendTransaction` requests through the WalletConnect session --
+first the `approve`, then the swap -- each requiring the user's
+explicit confirmation in their own wallet app. Slippage tolerance is
+user-selectable (0.5% / 1% / 3%); the swap button is disabled unless
+the currently-displayed quote still matches the amount actually typed,
+so a stale quote can never be submitted silently.
+
+### 31.4 A real Android/Gradle toolchain conflict, found and fixed
+
+`reown_appkit` transitively (and non-optionally) depends on two Android
+plugins that don't fit this project's existing Gradle setup as-is:
+
+- `appcheck` (used to detect which wallet apps are installed, for the
+  connect modal's "installed" list) -- versions >=1.6.0 require Kotlin
+  2.2.21 and Android Gradle Plugin 8.13.1, which this project's pinned
+  Kotlin 1.7.10 / AGP 7.3.0 / Gradle 7.6.3 toolchain cannot compile
+  (`flutter build apk --release` failed outright in
+  `:appcheck:compileReleaseKotlin`). Fixed narrowly: pinned
+  `dependency_overrides: appcheck: 1.5.4+1` in `cac_wallet/pubspec.yaml`
+  -- the newest release still on the older Kotlin 1.6.10 / AGP 4.1.3
+  toolchain this project's existing pins already satisfy. Bumping the
+  whole project's Kotlin/AGP/Gradle for one optional wallet-detection
+  feature was judged out of scope for this change and a decision that
+  deserves its own pass if ever needed (it would also force a Java/CI
+  toolchain change, similar in kind to the JDK 17 pin already required
+  for Gradle 7.6.3).
+- `coinbase_wallet_sdk` (Reown AppKit's built-in Coinbase Wallet
+  support) declares `minSdk 23` in its manifest. The app's own
+  `minSdkVersion` was 21 (raised once already for `mobile_scanner`).
+  Raised to 23 (Android 6.0, released 2015) in
+  `cac_wallet/android/app/build.gradle` -- by 2026 this excludes a
+  vanishingly small share of active devices, so treated as a safe,
+  narrow bump rather than something requiring a design discussion.
+
+### 31.5 What was and wasn't verified
+
+Verified: `flutter analyze` clean; full test suite green, including 15
+new unit tests for `pancake_swap.dart`'s calldata encoding, decimal
+parsing/formatting, and slippage math; a clean `flutter build apk
+--release` (80.5MB, up from 34.3MB with the WalletConnect/web3dart
+stack added).
+
+Not verified, and not verifiable in this environment: an actual
+WalletConnect pairing handshake against a real external wallet app, a
+real signed `approve`/swap round-trip, and the live on-chain quote
+call actually returning a sane value from a running device with real
+network access. This is the same testability gap flagged for this
+feature back in section 30 and, before that, for hardware-wallet
+support -- it needs real-device testing by the user (or a future CI
+step) before being treated as fully proven, not just built.

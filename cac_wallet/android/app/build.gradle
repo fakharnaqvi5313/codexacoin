@@ -45,7 +45,7 @@ android {
         applicationId "com.codexacoin.cac_wallet"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion 21 // mobile_scanner requires >=21; flutter.minSdkVersion (19) is too low
+        minSdkVersion 23 // coinbase_wallet_sdk (via reown_appkit) requires >=23; mobile_scanner needed >=21, flutter.minSdkVersion (19) is too low for either
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
