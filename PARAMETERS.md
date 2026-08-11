@@ -3134,3 +3134,125 @@ network access. This is the same testability gap flagged for this
 feature back in section 30 and, before that, for hardware-wallet
 support -- it needs real-device testing by the user (or a future CI
 step) before being treated as fully proven, not just built.
+
+## 32. Air-gapped offline signing, in place of Ledger/Trezor hardware
+wallet support (2026-08-11)
+
+Requested: hardware wallet support (this project's own
+section-58-era backlog item). Researched Ledger's and Trezor's current
+(2026) SDKs and coin-registration processes before writing any code,
+since this determines whether it's buildable at all:
+
+- Trezor's own forum states plainly they don't currently have
+  capacity to add new coins -- coin support is compiled into firmware
+  from a definitions repo, and there's no documented path for an app
+  to make a Trezor sign for a coin it doesn't already know.
+- Ledger's current SDKs (`hw-app-btc`, the newer PSBT-based
+  `app-bitcoin-new`) are built around officially registered per-coin
+  apps and wallet policies. Older Ledger Bitcoin app versions used to
+  let a few small forks pass custom P2PKH version bytes directly, but
+  current documentation doesn't confirm that path is still open, and
+  this is exactly the kind of thing not worth guessing about with real
+  funds at stake.
+
+Conclusion: literal Ledger Nano / Trezor Model T support for CAC is
+gated behind each vendor's official coin-listing process -- a
+business/community application neither this assistant nor the project
+owner can just do, and Trezor has already said they're not accepting
+new coins at all right now. Built the alternative that gets the same
+actual security property (the seed never touches an internet-connected
+device) without needing vendor approval: air-gapped signing between
+two instances of this same wallet.
+
+### 32.1 Not a BIP-174 PSBT implementation
+
+Modeled on PSBT's build/transfer/sign/transfer-back flow, but not
+byte-for-byte BIP-174 -- both ends of this exchange are always this
+same wallet's own code, so the wire-format complexity a real
+cross-tool-interoperable PSBT needs buys nothing here, and no
+third-party PSBT tool would recognize CAC's non-Bitcoin address
+version bytes anyway (same point already made in `xpub.dart`'s
+comments about its xpub export). This is a minimal, purpose-built
+JSON request/result format, in the same spirit as `transaction.dart`'s
+existing `MultisigProposal` (a from-scratch partial-signing format
+scoped to this wallet, explicitly not a general PSBT implementation
+either).
+
+### 32.2 Design and safety property
+
+Two roles, both just this same app used differently:
+
+- **Online device**: watch-only. Holds no seed for the wallet being
+  spent from -- only an account xpub (already exportable via the
+  existing "Show my xpub" watch feature). Builds an unsigned spend
+  from that xpub's derived addresses' UTXOs (public-key-only BIP32
+  derivation, no private key involved anywhere in this step) and hands
+  it off as JSON (QR or text) to the offline device.
+- **Offline device**: holds the seed, meant to be kept off the network
+  entirely (airplane mode). Signs the request with its own seed and
+  hands the signed, ready-to-broadcast raw transaction back (QR or
+  text). Deliberately has no broadcast button at all -- broadcasting
+  is exclusively the online device's job, keeping the two roles
+  cleanly separated rather than tempting a "just this once" online
+  moment on the device meant to stay offline.
+
+Before signing any input, the offline side re-derives that input's key
+from its own seed and checks the resulting pubkey hash actually
+matches what the request claims for that input -- if it doesn't, this
+seed doesn't own that UTXO (wrong device, wrong seed, or a
+tampered/mismatched request), and it refuses to sign rather than
+producing a signature it can't verify belongs to this wallet. Note
+this is a UX safety net, not a fund-safety requirement on its own:
+even without it, a genuinely wrong signature would just be rejected by
+the network as an invalid spend of that UTXO, not misdirect funds --
+but failing fast with a clear in-app message beats a cryptic broadcast
+rejection later.
+
+### 32.3 Implementation
+
+`cac_wallet/lib/crypto/offline_signing.dart` -- pure module, no
+network calls: `OfflineSignRequest`/`OfflineSignInput`/
+`OfflineSignOutput` (JSON-serializable, hex throughout, matching this
+codebase's established convention) and `signOfflineTransaction()`,
+which re-derives keys, runs the pubkey-hash safety check above, and
+calls the existing `buildAndSignTransaction()` directly rather than
+reimplementing signing -- the offline-signed path and the normal
+hot-wallet path share the exact same signing code, they just gather
+their inputs' keys differently.
+
+`cac_wallet/lib/screens/offline_send_screen.dart` (online/watch-only
+side) and `offline_sign_screen.dart` (offline/seed-holding side) --
+new Home-screen actions, "Offline Send" and "Sign Offline". Both reuse
+the multisig screen's existing QR conventions exactly: `qr_flutter` +
+the existing `QrScanScreen`, same 1500-character cutoff with a
+"share the text directly instead" fallback message for anything too
+large to scan reliably.
+
+`WalletService.signOfflineSignRequest()` -- the one new method on the
+wallet service itself, since it's the only step that needs the
+device's own private mnemonic (kept internal to the service, same as
+every other signing path in this codebase; never exposed to the UI
+layer).
+
+### 32.4 What was and wasn't verified
+
+Verified, and unusually strongly for this kind of feature: a unit test
+signs the same inputs/outputs both directly (the normal hot-wallet
+path) and through `signOfflineTransaction()`, and asserts the two
+resulting raw transactions are **byte-for-byte identical** -- possible
+because this codebase's ECDSA signing is already deterministic
+(RFC6979 nonces, noted in `transaction.dart`), so this isn't just "did
+it not crash," it's "did it produce the exact same valid signature."
+Also tested: the pubkey-hash safety check actually refuses to sign a
+mismatched input, JSON round-tripping, and multi-input requests across
+different derivation indices. `flutter analyze` clean; full test suite
+green (61 tests, 6 new); a real `flutter build apk --release` succeeds.
+
+Not verified, and not fully verifiable in this environment: an actual
+two-device QR handoff in both directions, and a broadcast of a
+transaction that was genuinely signed offline on separate hardware.
+The unit-level proof above (byte-identical output to the already-
+verified hot-wallet signing path) is about as strong a substitute as
+can be produced without two physical devices, but real two-device
+testing by the user is still the right final check before relying on
+this for actual funds.

@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import '../config/network_config.dart';
 import '../crypto/address.dart';
 import '../crypto/keys.dart';
+import '../crypto/offline_signing.dart' as offline;
 import '../crypto/transaction.dart' as tx;
 import '../crypto/xpub.dart' as xpub;
 import 'gateway_api.dart';
@@ -487,6 +488,16 @@ class WalletService extends ChangeNotifier {
     await _storage.saveSentTxLog(log2);
 
     return newTxid;
+  }
+
+  /// Signs an air-gapped offline-signing request (see
+  /// crypto/offline_signing.dart) with this wallet's own seed. Meant to
+  /// be run only on a device kept offline -- see PARAMETERS.md section
+  /// 32. Does not broadcast; the caller (UI) hands the result back to
+  /// the online/watch-only device however it likes (QR, text).
+  Future<Uint8List> signOfflineSignRequest(offline.OfflineSignRequest request) async {
+    if (_mnemonic == null) throw StateError('No wallet loaded');
+    return offline.signOfflineTransaction(request: request, mnemonic: _mnemonic!, network: network);
   }
 
   /// This wallet's multisig identity key, independent of whichever

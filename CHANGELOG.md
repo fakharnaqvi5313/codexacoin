@@ -1565,6 +1565,45 @@ wallets
 
 ---
 
+## Added air-gapped offline signing (in place of Ledger/Trezor support)
+
+### 2026-08-11
+
+- Requested hardware wallet support; researched Ledger's and Trezor's
+  current SDKs and coin-registration requirements first rather than
+  assuming it was buildable. Both gate device signing behind an
+  officially registered coin list -- Trezor's forum states they aren't
+  accepting new coins at all right now, and Ledger's current docs
+  don't confirm any path for an unregistered coin either. Neither is
+  something this project can just apply its way past.
+- Built the alternative that gets the same real security property
+  (seed never touches an internet-connected device) without vendor
+  approval: air-gapped signing between two instances of `cac_wallet`
+  itself. An online, watch-only device (an xpub only, no seed) builds
+  an unsigned spend and hands it off as QR/text; an offline device
+  holding the seed (meant to stay in airplane mode) signs it and hands
+  back a ready-to-broadcast raw transaction -- it has no broadcast
+  button at all, keeping the two roles strictly separated. Not a
+  BIP-174 PSBT implementation -- a minimal, purpose-built format, same
+  spirit as this wallet's existing multisig proposal format, since
+  both ends are always this same wallet's own code.
+- New Home-screen actions "Offline Send" and "Sign Offline"; new pure
+  module `lib/crypto/offline_signing.dart`.
+- Unusually strong verification for this kind of feature: a test signs
+  the same transaction both the normal way and via the offline path
+  and asserts the raw output is **byte-for-byte identical** (possible
+  because this wallet's ECDSA signing is already RFC6979-deterministic)
+  -- not just "didn't crash," but "produced the exact same valid
+  signature." Also tested: the safety check that refuses to sign an
+  input that doesn't actually belong to the seed being used.
+  `flutter analyze` and the full test suite (61 tests, 6 new) clean;
+  a real `flutter build apk --release` succeeds. Not verified here: an
+  actual two-device QR handoff and a broadcast of something genuinely
+  signed on separate hardware -- needs real-device testing. See
+  PARAMETERS.md section 32 for the full write-up.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

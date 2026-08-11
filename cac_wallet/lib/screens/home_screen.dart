@@ -12,6 +12,8 @@ import '../services/wallet_service.dart';
 import '../widgets/fiat_placeholder.dart';
 import 'history_screen.dart';
 import 'multisig_screen.dart';
+import 'offline_send_screen.dart';
+import 'offline_sign_screen.dart';
 import 'receive_screen.dart';
 import 'send_screen.dart';
 import 'settings_screen.dart';
@@ -260,6 +262,42 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Pairs with your own wallet app over WalletConnect so it can '
                 'submit the swap for you -- still no keys held here. An '
                 'alternative to the button above, not a replacement for it.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
+            const Divider(height: 40),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionButton(
+                    icon: Icons.send_to_mobile_outlined,
+                    label: 'Offline Send',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const OfflineSendScreen()),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ActionButton(
+                    icon: Icons.airplanemode_active,
+                    label: 'Sign Offline',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const OfflineSignScreen()),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Air-gapped signing: keep your seed on a second, offline '
+                'device instead of a Ledger/Trezor -- neither vendor '
+                'supports an unlisted coin like CAC. "Offline Send" builds '
+                'an unsigned request from a watch-only xpub; "Sign Offline" '
+                'signs it on the device holding the seed.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: Colors.grey),
               ),
