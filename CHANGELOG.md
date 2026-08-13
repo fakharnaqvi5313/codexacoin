@@ -1692,6 +1692,53 @@ wallets
 
 ---
 
+## Fixed bad-txns-fee-not-enough; adjustable fees; referral copy/history
+
+### 2026-08-13
+
+- **Fixed a live bug reported by a user**: sends were failing on-chain
+  with `bad-txns-fee-not-enough`. Root cause: the node's consensus
+  minimum fee (`CFeeRate::GetFee`) rounds up
+  (`ceil(rate*size/1000)`); every client-side fee calculation on both
+  platforms rounded down (floor/truncating division). Whenever
+  `rate*size` wasn't an exact multiple of 1000 -- true for nearly
+  every real transaction -- the wallet computed exactly 1 satoshi less
+  than the network requires. Fixed all 8 fee-computation sites across
+  both platforms (regular send, multisig propose, offline/air-gapped
+  send, fee-bump). Verified by brute-forcing every vsize from 100-5000
+  bytes against the exact consensus formula in both the Dart runtime
+  and a real browser's JS engine -- zero mismatches after the fix.
+- **Adjustable network fee**: the send screen on both platforms now
+  shows the gateway's recommended sat/vB rate with +/- controls and a
+  direct input, so a user can pay more than the recommendation if they
+  want. Can't go lower -- this coin enforces a single fixed consensus
+  minimum, not a real congestion market, so anything lower would just
+  get rejected; the send handler re-fetches the current floor at send
+  time and only honors an override that's still above it.
+- **Referral code copy + history**: web wallet's referral card gained
+  a Copy button and a history list (new `GET /v1/referral/history`)
+  showing every referred user (masked email) and what they've earned,
+  not just an aggregate count. Mobile gained a whole new `ReferralScreen`
+  (previously mobile had no way to view/share your own code at all,
+  only to enter someone else's at signup) with copy, share, the same
+  history list, and a withdraw form.
+- **Fixed a second, unrelated live bug found while testing the
+  above**: `let txPollHandle` (the live new-tx-banner poller) was
+  declared far below `boot()`, which can synchronously reach into
+  `enterWallet()` and start polling before the module finishes
+  evaluating top to bottom. Any user with an existing wallet and no
+  PIN set hit a "Cannot access before initialization" TDZ error on
+  every page load, which crashed `boot()` and left the whole UI blank.
+  Moved the declaration earlier, before `boot()` is ever called.
+- Deployed all of the above live: gateway restarted with the new
+  endpoint (verified end-to-end against a real SQLite DB and the live
+  auth-required response), web wallet redeployed to
+  `codexacoin.com/wallet/`, and a freshly rebuilt release APK
+  published to `codexacoin.com/downloads/` with a regenerated
+  GPG-signed `SHA256SUMS`.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The
