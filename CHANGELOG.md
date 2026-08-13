@@ -1658,9 +1658,37 @@ wallets
   pass `py_compile` and import cleanly with the two new dependencies
   actually installed (not just assumed to resolve); the new endpoint's
   request validation and the watcher's empty-state path were both
-  exercised directly. Not deployed to the live gateway in this pass --
-  that's a separate step once real Firebase credentials are in hand.
-  See PARAMETERS.md section 34 for the full write-up.
+  exercised directly. See PARAMETERS.md section 34 for the full
+  write-up. (Deployed to the live gateway on 2026-08-13 alongside
+  batch sends -- still fully inert pending real Firebase credentials.)
+
+---
+
+## Deployed batch sends and push notifications; direct on-chain PancakeSwap price
+
+### 2026-08-13
+
+- Deployed the above two features to production: synced
+  `vps-gateway/` to `/opt/cac-gateway` (new pip deps installed, DB
+  migration run, `cac-gateway.service` restarted), synced `web-wallet/`
+  to `codexacoin.com/wallet/`, and published a freshly rebuilt release
+  APK to `codexacoin.com/downloads/` with a regenerated GPG-signed
+  `SHA256SUMS`. Verified live, not just "deployed": hit the new
+  `/v1/push/mobile/register` endpoint against the real gateway and
+  confirmed the row landed in (and was removable from) the actual
+  production database; confirmed the live `price.js`/`app.js` being
+  served match the new source; confirmed the live `SHA256SUMS` hash
+  for the APK matches the local build byte-for-byte.
+- Both wallets' CAC/USD price estimate now reads the CAC/USDT
+  PancakeSwap V2 pool's reserves directly via a raw `eth_call` to
+  `getReserves()` over a public BSC RPC endpoint, rather than only
+  through GeckoTerminal's indexed API. GeckoTerminal and the existing
+  Stellar DEX fallback remain as fallbacks if the direct RPC call
+  fails. Verified the pair's `token0()`/`token1()` order and decimals
+  on-chain before writing any code (rather than assuming), and
+  confirmed the new code path in both a real browser (CORS actually
+  works against the public RPC endpoint) and the mobile runtime,
+  matching a hand-computed value from the same raw reserve data.
 
 ---
 
