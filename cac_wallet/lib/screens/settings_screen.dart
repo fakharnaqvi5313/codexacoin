@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../config/network_config.dart';
 import '../crypto/message.dart' as msg;
+import '../services/firebase_config.dart';
+import '../services/push_service.dart';
 import '../services/wallet_service.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -89,6 +91,8 @@ class SettingsScreen extends StatelessWidget {
             onChanged: (v) => wallet.setThemeMode(v!),
           ),
           const Divider(),
+          const _PushNotificationsCard(),
+          const Divider(),
           const _MessageToolCard(),
           const Divider(),
           ListTile(
@@ -96,6 +100,71 @@ class SettingsScreen extends StatelessWidget {
             title: const Text('Wipe wallet', style: TextStyle(color: Colors.red)),
             onTap: () => _confirmWipe(context),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Registers this device to be notified when the active address
+/// receives a payment -- native push (FCM), not this wallet's existing
+/// in-app "new transaction" banner, which only shows up while the app
+/// is already open. See PARAMETERS.md section 34: this is inert (shows
+/// a clear message, does nothing else) until a real Firebase project's
+/// credentials are filled into firebase_config.dart.
+class _PushNotificationsCard extends StatefulWidget {
+  const _PushNotificationsCard();
+
+  @override
+  State<_PushNotificationsCard> createState() => _PushNotificationsCardState();
+}
+
+class _PushNotificationsCardState extends State<_PushNotificationsCard> {
+  final _pushService = PushService();
+  bool _enabling = false;
+  bool _enabled = false;
+  String? _error;
+
+  Future<void> _enable(WalletService wallet) async {
+    setState(() {
+      _enabling = true;
+      _error = null;
+    });
+    final failureReason = await _pushService.enableForAddress(wallet.gateway, wallet.activeAddress());
+    setState(() {
+      _enabling = false;
+      _enabled = failureReason == null;
+      _error = failureReason;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wallet = context.watch<WalletService>();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(
+            isFirebaseConfigured
+                ? 'Get notified on this device when your active address (${wallet.activeAddress()}) receives a payment, even while the app is closed.'
+                : "Not set up on this build yet -- needs a Firebase project's credentials.",
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          if (isFirebaseConfigured)
+            OutlinedButton(
+              onPressed: (_enabling || _enabled) ? null : () => _enable(wallet),
+              child: Text(_enabled ? 'Enabled' : (_enabling ? 'Enabling...' : 'Enable notifications')),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            ),
         ],
       ),
     );

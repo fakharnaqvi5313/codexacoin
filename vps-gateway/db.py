@@ -88,6 +88,28 @@ def init_db():
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)")
+        # Native mobile push (FCM), keyed by address rather than a user
+        # account -- unlike push_subscriptions (Web Push, tied to a
+        # staking-service login), the mobile app doesn't require signing
+        # in just to watch an address for incoming payments, so this
+        # follows the same no-auth-required, address-keyed convention as
+        # /v1/address/<address>/balance and friends. last_notified_balance
+        # is how mobile_notify.py detects a *new* increase rather than
+        # re-notifying the same balance on every watcher pass.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobile_push_registrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                address TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                token TEXT NOT NULL,
+                last_notified_balance INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                UNIQUE(address, token)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mobile_push_address ON mobile_push_registrations(address)")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS referral_credits (

@@ -267,11 +267,28 @@ Standard `code` values: `invalid-address`, `not-found`, `tx-rejected`,
 
 ## 7. What this spec deliberately does not cover yet
 
-- Push notifications for incoming transactions (Phase 5 mobile-app
-  concern — likely built on Electrum's `scripthash.subscribe`
-  notifications, fanned out via the gateway to APNs/FCM, but not
-  specified here since it needs the actual mobile app architecture
-  decided first).
+- ~~Push notifications for incoming transactions~~ — built (2026-08-13),
+  see `POST /v1/push/mobile/register` below and PARAMETERS.md section
+  34. Ended up simpler than this section originally anticipated: a
+  periodic balance-diff check in the gateway's existing watcher
+  process rather than Electrum `scripthash.subscribe` notifications
+  (this gateway's RPC backend has no equivalent push mechanism of its
+  own to build on — see section 1's backend-choice note), fanned out
+  to FCM (not APNs directly; FCM can also deliver to iOS given an
+  uploaded APNs key, so one gateway-side integration covers both
+  platforms).
+
+### 7.1 `POST /v1/push/mobile/register`
+
+No auth required — address-keyed like §2-4 above, not account-keyed
+like §5's Web Push equivalent (`/v1/push/subscribe`), since watching
+your own address for payments shouldn't require a staking-service
+login.
+
+Request body: `{"address": "...", "platform": "android"|"ios", "token": "..."}`
+(`token` is the FCM registration token the mobile app's push SDK
+provides). Response: `{"registered": true}`.
+
 - Exact auth mechanism for §5 (deliberately TBD — see above).
 - Multi-backend failover/load-balancing behavior when the gateway has more
   than one `electrumx-cac` instance behind it (operational detail for

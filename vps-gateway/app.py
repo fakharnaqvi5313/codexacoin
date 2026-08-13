@@ -25,6 +25,10 @@ Configuration is via environment variables (see README.md):
     GATEWAY_POOL_FEE_BP      (default: 500 = 5%, matches cac_wallet's placeholder)
     GATEWAY_VAPID_PUBLIC_KEY / GATEWAY_VAPID_PRIVATE_KEY_PATH / GATEWAY_VAPID_SUBJECT
                              (Web Push -- see push.py and README.md's "Web Push" section)
+    GATEWAY_FCM_SERVICE_ACCOUNT_PATH
+                             (native mobile push via FCM -- see push_mobile.py.
+                              Not the same mechanism as the Web Push vars above;
+                              see PARAMETERS.md section 34 for why both exist.)
     GATEWAY_KYC_ENCRYPTION_KEY
                              (Fernet key encrypting signup ID numbers at rest --
                               see kyc.py. Signup returns 503 without it.)
@@ -470,6 +474,33 @@ def push_subscribe():
         )
         conn.commit()
     return jsonify({"subscribed": True})
+
+
+@app.route("/v1/push/mobile/register", methods=["POST"])
+@limiter.limit("30 per minute")
+def push_mobile_register():
+    """No auth required -- same convention as the balance/utxo/history
+    endpoints above (address-keyed, not account-keyed), since the
+    mobile app doesn't require a staking-service login just to watch
+    its own address for incoming payments. See mobile_notify.py for
+    what actually triggers a notification."""
+    body = request.get_json(silent=True) or {}
+    address = body.get("address")
+    platform = body.get("platform")
+    token = body.get("token")
+    if not address or platform not in ("android", "ios") or not token:
+        return error("invalid-request", "address, platform ('android'|'ios'), and token are required", 400)
+    if not is_valid_address(address):
+        return error("invalid-address", "Not a valid CodexaCoin address", 400)
+    with db.db() as conn:
+        conn.execute(
+            "INSERT INTO mobile_push_registrations (address, platform, token, last_notified_balance, created_at) "
+            "VALUES (?, ?, ?, 0, ?) "
+            "ON CONFLICT(address, token) DO UPDATE SET platform=excluded.platform",
+            (address, platform, token, db.now()),
+        )
+        conn.commit()
+    return jsonify({"registered": True})
 
 
 @app.route("/v1/staking/status")

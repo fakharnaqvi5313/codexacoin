@@ -129,5 +129,16 @@ class GatewayApi {
         'to_address': toAddress,
       }, auth: authToken);
 
+  // -- native mobile push (FCM) -- no auth required, address-keyed like
+  // the balance/utxo/history endpoints above rather than requiring a
+  // staking-service login. See vps-gateway/app.py's push_mobile_register
+  // and PARAMETERS.md section 34.
+  Future<void> registerPushToken({
+    required String address,
+    required String platform,
+    required String token,
+  }) =>
+      _post('/push/mobile/register', {'address': address, 'platform': platform, 'token': token});
+
   void close() => _client.close();
 }
