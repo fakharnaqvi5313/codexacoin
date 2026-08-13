@@ -1,5 +1,7 @@
-/// Send flow: scan or paste a destination address, enter an amount, fetch
-/// this wallet's UTXOs (across every address it's generated -- see
+/// Send flow: scan or paste one or more destination addresses with an
+/// amount each (a "batch send" -- one shared transaction, one shared
+/// fee, instead of sending separately to each), fetch this wallet's
+/// UTXOs (across every address it's generated -- see
 /// WalletService.gatherAllUtxos) from the gateway, sign locally, and
 /// broadcast. Signing happens entirely on-device (crypto/transaction.dart);
 /// the gateway only ever sees the final signed raw transaction hex.
@@ -14,6 +16,17 @@ import '../services/price_service.dart';
 import '../services/wallet_service.dart';
 import 'qr_scan_screen.dart';
 
+/// One recipient row's editable state.
+class _RecipientRow {
+  final TextEditingController addressController = TextEditingController();
+  final TextEditingController amountController = TextEditingController();
+
+  void dispose() {
+    addressController.dispose();
+    amountController.dispose();
+  }
+}
+
 class SendScreen extends StatefulWidget {
   const SendScreen({super.key});
 
@@ -22,8 +35,7 @@ class SendScreen extends StatefulWidget {
 }
 
 class _SendScreenState extends State<SendScreen> {
-  final _addressController = TextEditingController();
-  final _amountController = TextEditingController();
+  final List<_RecipientRow> _recipients = [_RecipientRow()];
   bool _sending = false;
   String? _error;
   String? _txid;
@@ -38,35 +50,50 @@ class _SendScreenState extends State<SendScreen> {
     fetchCacUsdPrice().then((p) {
       if (mounted) setState(() => _price = p);
     });
-    // Rebuilds on every keystroke so the fiat estimate below the amount
-    // field stays current -- setState with no controller-derived state
-    // change is fine here since build() reads straight from the
-    // controller's current text.
-    _amountController.addListener(() => setState(() {}));
+    // Rebuilds on every keystroke so the fiat estimate below stays
+    // current -- setState with no controller-derived state change is
+    // fine here since build() reads straight from each controller's
+    // current text.
+    _recipients.first.amountController.addListener(() => setState(() {}));
   }
 
-  Future<void> _scanQr() async {
+  void _addRecipient() {
+    setState(() {
+      final row = _RecipientRow();
+      row.amountController.addListener(() => setState(() {}));
+      _recipients.add(row);
+    });
+  }
+
+  void _removeRecipient(int index) {
+    setState(() {
+      _recipients[index].dispose();
+      _recipients.removeAt(index);
+    });
+  }
+
+  Future<void> _scanQr(int index) async {
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const QrScanScreen(title: 'Scan address')),
     );
     if (result != null) {
       final parsed = parseBip21(result);
       setState(() {
-        _addressController.text = parsed.address;
-        if (parsed.amount != null) _amountController.text = parsed.amount.toString();
+        _recipients[index].addressController.text = parsed.address;
+        if (parsed.amount != null) _recipients[index].amountController.text = parsed.amount.toString();
       });
     }
   }
 
-  void _onAddressChanged(String value) {
+  void _onAddressChanged(int index, String value) {
     final parsed = parseBip21(value);
     if (parsed.address != value) {
-      _addressController.text = parsed.address;
-      if (parsed.amount != null) _amountController.text = parsed.amount.toString();
+      _recipients[index].addressController.text = parsed.address;
+      if (parsed.amount != null) _recipients[index].amountController.text = parsed.amount.toString();
     }
   }
 
-  Future<void> _openAddressBook() async {
+  Future<void> _openAddressBook(int index) async {
     final wallet = context.read<WalletService>();
     final entries = await wallet.loadAddressBook();
     if (!mounted) return;
@@ -79,8 +106,21 @@ class _SendScreenState extends State<SendScreen> {
       ),
     );
     if (picked != null) {
-      setState(() => _addressController.text = picked);
+      setState(() => _recipients[index].addressController.text = picked);
     }
+  }
+
+  double? get _totalAmountCac {
+    var total = 0.0;
+    var any = false;
+    for (final r in _recipients) {
+      final v = double.tryParse(r.amountController.text.trim());
+      if (v != null && v > 0) {
+        total += v;
+        any = true;
+      }
+    }
+    return any ? total : null;
   }
 
   Future<void> _send() async {
@@ -91,11 +131,16 @@ class _SendScreenState extends State<SendScreen> {
     });
     try {
       final wallet = context.read<WalletService>();
-      final amountCac = double.tryParse(_amountController.text.trim());
-      if (amountCac == null || amountCac <= 0) {
-        throw ArgumentError('Enter a valid amount');
+      final recipients = <SendRecipient>[];
+      for (final r in _recipients) {
+        final address = r.addressController.text.trim();
+        final amountCac = double.tryParse(r.amountController.text.trim());
+        if (address.isEmpty || amountCac == null || amountCac <= 0) {
+          throw ArgumentError('Enter a valid address and amount for every recipient');
+        }
+        recipients.add(SendRecipient(address: address, amountSatoshis: (amountCac * 100000000).round()));
       }
-      final amountSatoshis = (amountCac * 100000000).round();
+      final amountTotalSatoshis = recipients.fold<int>(0, (sum, r) => sum + r.amountSatoshis);
 
       final allUtxos = await wallet.gatherAllUtxos();
       if (allUtxos.isEmpty) {
@@ -105,34 +150,38 @@ class _SendScreenState extends State<SendScreen> {
       final feeJson = await wallet.gateway.feeEstimate();
       final feeRate = int.tryParse(feeJson['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
 
+      // Output count scales with recipient count now (N destinations +
+      // 1 change), not the fixed 2 a single-recipient send always had.
+      final outputCount = recipients.length + 1;
       var totalIn = 0;
       final chosen = <tx.Utxo>[];
       for (final u in allUtxos) {
         chosen.add(u);
         totalIn += u.valueSatoshis;
-        // Scaled by input count, not a fixed guess -- once a send can span
-        // more than one address's UTXOs a single-input estimate stops
-        // being reasonable. Still a rough estimate, not real dynamic fee
-        // estimation (this gateway has none -- see mobile-api.md section 4).
-        final estimatedVsize = 10 + chosen.length * 148 + 2 * 34;
+        final estimatedVsize = 10 + chosen.length * 148 + outputCount * 34;
         final feeSatoshis = (feeRate * estimatedVsize) ~/ 1000;
-        if (totalIn >= amountSatoshis + feeSatoshis) break;
+        if (totalIn >= amountTotalSatoshis + feeSatoshis) break;
       }
-      final finalVsize = 10 + chosen.length * 148 + 2 * 34;
+      final finalVsize = 10 + chosen.length * 148 + outputCount * 34;
       final feeSatoshis = (feeRate * finalVsize) ~/ 1000;
-      if (totalIn < amountSatoshis + feeSatoshis) {
-        throw StateError('Insufficient funds: have $totalIn, need ${amountSatoshis + feeSatoshis}');
+      if (totalIn < amountTotalSatoshis + feeSatoshis) {
+        throw StateError('Insufficient funds: have $totalIn, need ${amountTotalSatoshis + feeSatoshis}');
       }
 
       final txid = await wallet.sendTransaction(
         utxos: chosen,
-        toAddress: _addressController.text.trim(),
-        amountSatoshis: amountSatoshis,
+        recipients: recipients,
         feeSatoshis: feeSatoshis,
       );
-      setState(() => _txid = txid);
-      _addressController.clear();
-      _amountController.clear();
+      setState(() {
+        _txid = txid;
+        for (final r in _recipients.skip(1)) {
+          r.dispose();
+        }
+        _recipients
+          ..clear()
+          ..add(_RecipientRow());
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -142,8 +191,9 @@ class _SendScreenState extends State<SendScreen> {
 
   @override
   void dispose() {
-    _addressController.dispose();
-    _amountController.dispose();
+    for (final r in _recipients) {
+      r.dispose();
+    }
     super.dispose();
   }
 
@@ -151,14 +201,26 @@ class _SendScreenState extends State<SendScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Send')),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        children: [
+          for (var i = 0; i < _recipients.length; i++) ...[
+            if (i > 0) const Divider(height: 32),
+            if (_recipients.length > 1)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Recipient ${i + 1}', style: Theme.of(context).textTheme.labelLarge),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: 'Remove recipient',
+                    onPressed: () => _removeRecipient(i),
+                  ),
+                ],
+              ),
             TextField(
-              controller: _addressController,
-              onChanged: _onAddressChanged,
+              controller: _recipients[i].addressController,
+              onChanged: (v) => _onAddressChanged(i, v),
               decoration: InputDecoration(
                 labelText: 'Destination address',
                 border: const OutlineInputBorder(),
@@ -168,12 +230,12 @@ class _SendScreenState extends State<SendScreen> {
                     IconButton(
                       icon: const Icon(Icons.contacts_outlined),
                       tooltip: 'Address book',
-                      onPressed: _openAddressBook,
+                      onPressed: () => _openAddressBook(i),
                     ),
                     IconButton(
                       icon: const Icon(Icons.qr_code_scanner),
                       tooltip: 'Scan QR',
-                      onPressed: _scanQr,
+                      onPressed: () => _scanQr(i),
                     ),
                   ],
                 ),
@@ -181,52 +243,59 @@ class _SendScreenState extends State<SendScreen> {
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _amountController,
+              controller: _recipients[i].amountController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Amount (CAC)',
                 border: OutlineInputBorder(),
               ),
             ),
-            Builder(builder: (context) {
-              final amount = double.tryParse(_amountController.text.trim());
-              if (_price == null || amount == null || amount <= 0) {
-                return const SizedBox.shrink();
-              }
-              final usdValue = amount * _price!.usdPerCac;
-              final sourceLabel =
-                  _price!.source == CacPriceSource.bnb ? 'PancakeSwap (BNB Chain)' : 'Stellar DEX';
-              return Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '~\$${usdValue.toStringAsFixed(2)} (estimated -- thin $sourceLabel liquidity, not a reliable market price)',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
-                ),
-              );
-            }),
-            const SizedBox(height: 24),
-            if (_error != null) Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(_error!, style: const TextStyle(color: Colors.red)),
-            ),
-            if (_txid != null) Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text('Broadcast: $_txid',
-                  style: const TextStyle(color: Colors.green)),
-            ),
-            FilledButton(
-              onPressed: _sending ? null : _send,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: _sending
-                    ? const SizedBox(
-                        height: 20, width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Send'),
-              ),
-            ),
           ],
-        ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _addRecipient,
+            icon: const Icon(Icons.add),
+            label: const Text('Add recipient'),
+          ),
+          Builder(builder: (context) {
+            final total = _totalAmountCac;
+            if (_price == null || total == null) {
+              return const SizedBox.shrink();
+            }
+            final usdValue = total * _price!.usdPerCac;
+            final sourceLabel =
+                _price!.source == CacPriceSource.bnb ? 'PancakeSwap (BNB Chain)' : 'Stellar DEX';
+            final prefix = _recipients.length > 1 ? 'Total: ' : '';
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '$prefix~\$${usdValue.toStringAsFixed(2)} (estimated -- thin $sourceLabel liquidity, not a reliable market price)',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+          if (_error != null) Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(_error!, style: const TextStyle(color: Colors.red)),
+          ),
+          if (_txid != null) Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text('Broadcast: $_txid',
+                style: const TextStyle(color: Colors.green)),
+          ),
+          FilledButton(
+            onPressed: _sending ? null : _send,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: _sending
+                  ? const SizedBox(
+                      height: 20, width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(_recipients.length > 1 ? 'Send to ${_recipients.length} recipients' : 'Send'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -257,7 +257,23 @@ select option {
   margin: 8px 0;
 }
 .qr-scan-btn { flex: 0 0 auto; width: auto; padding: 12px 16px; margin-top: 0; }
-#screen-send .row:has(#btn-scan-qr) input { margin-bottom: 0; }
+#send-recipients .row:has(.qr-scan-btn) input { margin-bottom: 0; }
+
+/* Multi-recipient batch send rows */
+.recipient-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.recipient-row:first-child { padding-top: 0; }
+.recipient-row:last-child { border-bottom: none; }
+.recipient-row .recipient-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.recipient-row .remove-recipient-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
 
 .tx-detail-card .kv-row {
   display: flex;

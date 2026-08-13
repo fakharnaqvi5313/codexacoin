@@ -18,6 +18,15 @@ import '../crypto/xpub.dart' as xpub;
 import 'gateway_api.dart';
 import 'wallet_storage.dart';
 
+/// One destination in a [WalletService.sendTransaction] call -- a plain
+/// pair rather than anything JSON-serializable, since it only ever
+/// exists transiently while a send is being built.
+class SendRecipient {
+  final String address;
+  final int amountSatoshis;
+  const SendRecipient({required this.address, required this.amountSatoshis});
+}
+
 class WalletService extends ChangeNotifier {
   final WalletStorage _storage = WalletStorage();
   GatewayApi _gateway = GatewayApi(NetworkConfig.mainnet);
@@ -344,38 +353,49 @@ class WalletService extends ChangeNotifier {
     return Uint8List.fromList(bytes.reversed.toList());
   }
 
-  /// Builds, signs, and broadcasts a send. [utxos] should come from
+  /// Builds, signs, and broadcasts a send to one or more recipients in a
+  /// single transaction (a "batch send" -- one shared fee/change output
+  /// instead of one transaction per recipient). [utxos] should come from
   /// [gatherAllUtxos] (already tagged with each input's own signing key)
   /// -- this method does not itself query anything beyond broadcasting
   /// the final signed transaction. Change goes to the current active
   /// address.
   Future<String> sendTransaction({
     required List<tx.Utxo> utxos,
-    required String toAddress,
-    required int amountSatoshis,
+    required List<SendRecipient> recipients,
     required int feeSatoshis,
   }) async {
+    if (recipients.isEmpty) {
+      throw ArgumentError('No recipients specified');
+    }
     final changeKey = await ensureKey(activeIndex);
-    final decoded = decodeAddress(toAddress, network);
-    final Uint8List outScript;
-    switch (decoded.type) {
-      case AddressType.p2pkh:
-        outScript = tx.p2pkhScriptPubKey(decoded.hash);
-      case AddressType.p2sh:
-        outScript = tx.p2shScriptPubKey(decoded.hash);
-      case AddressType.p2wpkh:
-        outScript = tx.p2wpkhScriptPubKey(decoded.hash);
+
+    final destOutputs = <tx.TxOutputSpec>[];
+    var amountTotal = 0;
+    for (final r in recipients) {
+      final decoded = decodeAddress(r.address, network);
+      final Uint8List outScript;
+      switch (decoded.type) {
+        case AddressType.p2pkh:
+          outScript = tx.p2pkhScriptPubKey(decoded.hash);
+        case AddressType.p2sh:
+          outScript = tx.p2shScriptPubKey(decoded.hash);
+        case AddressType.p2wpkh:
+          outScript = tx.p2wpkhScriptPubKey(decoded.hash);
+      }
+      destOutputs.add(tx.TxOutputSpec(outScript, r.amountSatoshis));
+      amountTotal += r.amountSatoshis;
     }
 
     final totalIn = utxos.fold<int>(0, (sum, u) => sum + u.valueSatoshis);
-    final change = totalIn - amountSatoshis - feeSatoshis;
+    final change = totalIn - amountTotal - feeSatoshis;
     if (change < 0) {
-      throw ArgumentError('Insufficient funds: have $totalIn, need ${amountSatoshis + feeSatoshis}');
+      throw ArgumentError('Insufficient funds: have $totalIn, need ${amountTotal + feeSatoshis}');
     }
 
     final changeScript = tx.p2pkhScriptPubKey(hash160(changeKey.publicKey));
     final outputs = <tx.TxOutputSpec>[
-      tx.TxOutputSpec(outScript, amountSatoshis),
+      ...destOutputs,
       if (change > 0) tx.TxOutputSpec(changeScript, change),
     ];
 
@@ -395,7 +415,8 @@ class WalletService extends ChangeNotifier {
           ),
       ],
       outputs: [
-        tx.SentTxOutput(scriptPubKeyHex: _bytesToHex(outScript), valueSatoshis: amountSatoshis),
+        for (final o in destOutputs)
+          tx.SentTxOutput(scriptPubKeyHex: _bytesToHex(o.scriptPubKey), valueSatoshis: o.valueSatoshis),
         if (change > 0)
           tx.SentTxOutput(scriptPubKeyHex: _bytesToHex(changeScript), valueSatoshis: change, isChange: true),
       ],

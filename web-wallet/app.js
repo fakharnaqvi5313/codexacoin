@@ -311,31 +311,135 @@ async function loadFiatValue(totalSatoshis) {
 }
 
 // -------------------------------------------------------------------- send
+//
+// Supports sending to several recipients in a single transaction (a
+// "batch send" -- one shared fee/change output instead of one
+// transaction per recipient). Recipient rows are built dynamically
+// into #send-recipients rather than a single fixed pair of inputs --
+// see recipientRowHtml/wireRecipientRow below. crypto.js's
+// buildAndSignTransaction already accepts an arbitrary outputs list,
+// so nothing there needed to change for this.
+
+let sendRecipientIdCounter = 0;
+state.activeSendRecipientId = null; // which row's address field was last focused -- see the address-book "Use" handler
+
+function recipientRowHtml(id) {
+  return `<div class="recipient-row" data-recipient-id="${id}">
+    <div class="recipient-header">
+      <label class="field-label">Destination address</label>
+      <button class="danger remove-recipient-btn" type="button" data-remove-recipient="${id}">Remove</button>
+    </div>
+    <div class="row">
+      <input class="recipient-address" placeholder="C..." />
+      <button class="secondary qr-scan-btn" type="button" title="Scan QR code">Scan</button>
+    </div>
+    <label class="field-label">Amount (CAC)</label>
+    <input class="recipient-amount" type="number" step="0.00000001" />
+  </div>`;
+}
+
+function wireRecipientRow(row) {
+  const id = row.dataset.recipientId;
+  const addressInput = row.querySelector(".recipient-address");
+  const amountInput = row.querySelector(".recipient-amount");
+
+  addressInput.addEventListener("focus", () => {
+    state.activeSendRecipientId = id;
+  });
+  // Also handles a pasted codexacoin: URI (not just a scanned one) --
+  // same parseBip21 either way.
+  addressInput.addEventListener("change", (e) => {
+    const { address, amount } = parseBip21(e.target.value);
+    if (address !== e.target.value) {
+      e.target.value = address;
+      if (amount != null) amountInput.value = amount;
+    }
+  });
+  amountInput.addEventListener("focus", () => {
+    state.activeSendRecipientId = id;
+  });
+  amountInput.addEventListener("input", updateSendAmountFiat);
+
+  row.querySelector(".qr-scan-btn").addEventListener("click", () => {
+    openQrScanner((text) => {
+      const { address, amount } = parseBip21(text);
+      addressInput.value = address;
+      if (amount != null) amountInput.value = amount;
+    });
+  });
+  row.querySelector(".remove-recipient-btn").addEventListener("click", () => {
+    row.remove();
+    updateRecipientRemoveButtons();
+    updateSendAmountFiat();
+  });
+}
+
+function updateRecipientRemoveButtons() {
+  const rows = document.querySelectorAll(".recipient-row");
+  rows.forEach((row) => {
+    row.querySelector(".remove-recipient-btn").style.display = rows.length > 1 ? "" : "none";
+  });
+}
+
+function addRecipientRow() {
+  const id = sendRecipientIdCounter++;
+  const container = document.getElementById("send-recipients");
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = recipientRowHtml(id);
+  const row = wrapper.firstElementChild;
+  container.appendChild(row);
+  if (state.activeSendRecipientId == null) state.activeSendRecipientId = String(id);
+  wireRecipientRow(row);
+  updateRecipientRemoveButtons();
+}
+
+function resetSendRecipients() {
+  document.getElementById("send-recipients").innerHTML = "";
+  sendRecipientIdCounter = 0;
+  state.activeSendRecipientId = null;
+  addRecipientRow();
+}
+
+document.getElementById("btn-add-recipient").addEventListener("click", addRecipientRow);
+addRecipientRow(); // start with one row
 
 document.getElementById("btn-send-confirm").addEventListener("click", async () => {
   const errEl = document.getElementById("send-error");
   const okEl = document.getElementById("send-success");
   errEl.textContent = "";
   okEl.textContent = "";
-  const toAddress = document.getElementById("send-address").value.trim();
-  const amountCac = parseFloat(document.getElementById("send-amount").value);
-  if (!toAddress || !amountCac || amountCac <= 0) {
-    errEl.textContent = "Enter a destination address and a positive amount.";
-    return;
+
+  const rows = Array.from(document.querySelectorAll(".recipient-row"));
+  const recipients = [];
+  for (const row of rows) {
+    const address = row.querySelector(".recipient-address").value.trim();
+    const amountCac = parseFloat(row.querySelector(".recipient-amount").value);
+    if (!address || !amountCac || amountCac <= 0) {
+      errEl.textContent = "Enter a destination address and a positive amount for every recipient.";
+      return;
+    }
+    recipients.push({ address, amountSatoshis: BigInt(Math.round(amountCac * 1e8)) });
   }
-  const amountSatoshis = BigInt(Math.round(amountCac * 1e8));
+
   try {
     const network = cac.NETWORKS[state.network];
-    const decoded = cac.decodeAddress(toAddress, network);
-    let outScript;
-    if (decoded.type === cac.AddressType.p2pkh) outScript = cac.p2pkhScriptPubKey(decoded.hash);
-    else if (decoded.type === cac.AddressType.p2sh) outScript = cac.p2shScriptPubKey(decoded.hash);
-    else outScript = cac.p2wpkhScriptPubKey(decoded.hash);
+    const destOutputs = recipients.map((r) => {
+      const decoded = cac.decodeAddress(r.address, network);
+      let scriptPubKey;
+      if (decoded.type === cac.AddressType.p2pkh) scriptPubKey = cac.p2pkhScriptPubKey(decoded.hash);
+      else if (decoded.type === cac.AddressType.p2sh) scriptPubKey = cac.p2shScriptPubKey(decoded.hash);
+      else scriptPubKey = cac.p2wpkhScriptPubKey(decoded.hash);
+      return { scriptPubKey, valueSatoshis: Number(r.amountSatoshis) };
+    });
+    const amountTotalSatoshis = recipients.reduce((sum, r) => sum + r.amountSatoshis, 0n);
 
     const allUtxos = await gatherAllUtxos();
     const feeResp = await state.gateway.feeEstimate();
     const feeRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
 
+    // Output count scales with recipient count now (N destinations + 1
+    // change), not the fixed 2 a single-recipient send always had.
+    const outputCount = recipients.length + 1;
     let totalIn = 0n;
     const chosen = [];
     for (const u of allUtxos) {
@@ -343,23 +447,21 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
       totalIn += BigInt(u.value);
       // Re-estimated as inputs accumulate, scaled by input count -- rougher
       // than real dynamic fee estimation (this gateway has none, a known
-      // limitation noted in mobile-api.md section 4), but a fixed 226-byte
-      // guess stopped being reasonable once a send can span more than one
-      // address's UTXOs.
-      const estimatedVsize = BigInt(10 + chosen.length * 148 + 2 * 34);
+      // limitation noted in mobile-api.md section 4).
+      const estimatedVsize = BigInt(10 + chosen.length * 148 + outputCount * 34);
       const feeSatoshis = (feeRate * estimatedVsize) / 1000n;
-      if (totalIn >= amountSatoshis + feeSatoshis) break;
+      if (totalIn >= amountTotalSatoshis + feeSatoshis) break;
     }
-    const finalVsize = BigInt(10 + chosen.length * 148 + 2 * 34);
+    const finalVsize = BigInt(10 + chosen.length * 148 + outputCount * 34);
     const feeSatoshis = (feeRate * finalVsize) / 1000n;
-    if (totalIn < amountSatoshis + feeSatoshis) {
-      errEl.textContent = `Insufficient funds: have ${formatCac(totalIn)}, need ${formatCac(amountSatoshis + feeSatoshis)}`;
+    if (totalIn < amountTotalSatoshis + feeSatoshis) {
+      errEl.textContent = `Insufficient funds: have ${formatCac(totalIn)}, need ${formatCac(amountTotalSatoshis + feeSatoshis)}`;
       return;
     }
-    const change = totalIn - amountSatoshis - feeSatoshis;
+    const change = totalIn - amountTotalSatoshis - feeSatoshis;
     const changeKey = await ensureKey(state.activeIndex);
     const changeHash = cac.hash160(changeKey.publicKey);
-    const outputs = [{ scriptPubKey: outScript, valueSatoshis: Number(amountSatoshis) }];
+    const outputs = [...destOutputs];
     if (change > 0n) outputs.push({ scriptPubKey: cac.p2pkhScriptPubKey(changeHash), valueSatoshis: Number(change) });
 
     const inputs = chosen.map((u) => {
@@ -387,8 +489,8 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
       })),
       feeSatoshis: Number(feeSatoshis),
     });
-    document.getElementById("send-address").value = "";
-    document.getElementById("send-amount").value = "";
+    resetSendRecipients();
+    updateSendAmountFiat();
   } catch (e) {
     errEl.textContent = e instanceof GatewayError ? e.message : String(e);
   }
@@ -477,13 +579,6 @@ function openQrScanner(onResult) {
     },
   });
 }
-document.getElementById("btn-scan-qr").addEventListener("click", () => {
-  openQrScanner((text) => {
-    const { address, amount } = parseBip21(text);
-    document.getElementById("send-address").value = address;
-    if (amount != null) document.getElementById("send-amount").value = amount;
-  });
-});
 function closeQrScan() {
   if (state.qrScanHandle) state.qrScanHandle.stop();
   state.qrScanHandle = null;
@@ -491,16 +586,6 @@ function closeQrScan() {
   document.getElementById("qr-video").srcObject = null;
 }
 document.getElementById("btn-qr-scan-cancel").addEventListener("click", closeQrScan);
-
-// Also handles a pasted codexacoin: URI (not just a scanned one) -- same
-// parseBip21 either way.
-document.getElementById("send-address").addEventListener("change", (e) => {
-  const { address, amount } = parseBip21(e.target.value);
-  if (address !== e.target.value) {
-    e.target.value = address;
-    if (amount != null) document.getElementById("send-amount").value = amount;
-  }
-});
 
 // -------------------------------------------------------------- address book
 
@@ -533,7 +618,14 @@ function renderAddressBook() {
     .join("");
   listEl.querySelectorAll("[data-use]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.getElementById("send-address").value = entries[Number(btn.dataset.use)].address;
+      // Fills whichever recipient row's address field was last focused
+      // (falling back to the first row if none was, or it's since been
+      // removed) -- there's no single fixed address field to target
+      // anymore now that a send can have several recipients.
+      const targetRow =
+        document.querySelector(`.recipient-row[data-recipient-id="${state.activeSendRecipientId}"]`) ||
+        document.querySelector(".recipient-row");
+      if (targetRow) targetRow.querySelector(".recipient-address").value = entries[Number(btn.dataset.use)].address;
     });
   });
   listEl.querySelectorAll("[data-remove]").forEach((btn) => {
@@ -593,16 +685,20 @@ async function loadSendAmountFiat() {
 }
 function updateSendAmountFiat() {
   const el = document.getElementById("send-amount-fiat");
-  const amount = parseFloat(document.getElementById("send-amount").value);
-  if (!sendScreenPrice || !(amount > 0)) {
+  const rows = document.querySelectorAll(".recipient-row");
+  const amounts = Array.from(rows)
+    .map((row) => parseFloat(row.querySelector(".recipient-amount").value))
+    .filter((a) => a > 0);
+  if (!sendScreenPrice || amounts.length === 0) {
     el.textContent = "";
     return;
   }
-  const usdValue = amount * sendScreenPrice.usdPerCac;
+  const total = amounts.reduce((a, b) => a + b, 0);
+  const usdValue = total * sendScreenPrice.usdPerCac;
   const sourceLabel = sendScreenPrice.source === "bnb" ? "PancakeSwap (BNB Chain)" : "Stellar DEX";
-  el.textContent = `~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- thin ${sourceLabel} liquidity, not a reliable market price)`;
+  const prefix = rows.length > 1 ? "Total: " : "";
+  el.textContent = `${prefix}~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- thin ${sourceLabel} liquidity, not a reliable market price)`;
 }
-document.getElementById("send-amount").addEventListener("input", updateSendAmountFiat);
 document.getElementById("btn-view-on-explorer").addEventListener("click", () => {
   window.open(`https://codexacoin.com/blockexplorer/#/address/${activeAddress()}`, "_blank", "noopener");
 });
