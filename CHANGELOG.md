@@ -1604,6 +1604,66 @@ wallets
 
 ---
 
+## Added multi-recipient batch sends (both platforms)
+
+### 2026-08-13
+
+- Send screens on both `web-wallet` and `cac_wallet` now support
+  several recipients in one transaction (one shared fee/change output
+  instead of sending separately to each). Nothing changed at the
+  signing layer -- both platforms' `buildAndSignTransaction()` already
+  accepted an arbitrary outputs list; this was purely a UI and
+  service-layer change (`WalletService.sendTransaction()` now takes a
+  `List<SendRecipient>` on mobile; the web send form builds dynamic
+  recipient rows instead of one fixed address/amount pair).
+- Mobile: `flutter analyze` and the full test suite (61 tests) clean;
+  a real `flutter build apk --release` succeeds.
+- Web: no JS test suite exists for `web-wallet`, so verified directly
+  in-browser -- add/remove recipient rows, the combined fiat total
+  estimate, the address book's "Use" button correctly targeting the
+  last-focused row, and the full send path executing cleanly. See
+  PARAMETERS.md section 33 for the full write-up.
+
+---
+
+## Added native mobile push notifications for incoming payments
+
+### 2026-08-13
+
+- `cac_wallet` can now register a device to be notified when its
+  active address receives a payment, even while the app is closed --
+  the existing in-app "new transaction" banner only shows up while
+  the app is already open. Uses Firebase Cloud Messaging, a different
+  mechanism from web-wallet's existing Web Push/VAPID system (browser-
+  only, no Flutter equivalent) and a new incoming-payment trigger
+  (the existing gateway push system only covered staking deposit/
+  reward events, not ordinary payments).
+- New gateway endpoint `POST /v1/push/mobile/register` (no auth
+  required, address-keyed -- same convention as the balance/utxo/
+  history endpoints, not the account-keyed Web Push one), a new
+  `mobile_push_registrations` table, and a new watcher step
+  (`mobile_notify.py`) that detects a registered address's balance
+  increasing and sends a push.
+- Genuinely blocked on external credentials this assistant can't
+  create (a Firebase project's service account key and app config
+  values), same standing constraint as the Reown/WalletConnect project
+  ID. Built and verified everything possible without them, designed to
+  stay completely inert until they're supplied: `cac_wallet`
+  initializes Firebase from Dart-side config values rather than
+  `google-services.json`/the Android Gradle plugin specifically so
+  adding this didn't require touching (or risk breaking) the already-
+  working Android build before real credentials exist -- confirmed
+  empirically with a real `flutter build apk --release`, not just
+  assumed. `flutter analyze` clean. Gateway: new/changed Python files
+  pass `py_compile` and import cleanly with the two new dependencies
+  actually installed (not just assumed to resolve); the new endpoint's
+  request validation and the watcher's empty-state path were both
+  exercised directly. Not deployed to the live gateway in this pass --
+  that's a separate step once real Firebase credentials are in hand.
+  See PARAMETERS.md section 34 for the full write-up.
+
+---
+
 ## Pre-fork history (inherited from Blackcoin More)
 
 Everything above `## Phase 1` in this file is CodexaCoin's own history. The

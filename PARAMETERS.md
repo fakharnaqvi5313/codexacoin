@@ -3256,3 +3256,204 @@ verified hot-wallet signing path) is about as strong a substitute as
 can be produced without two physical devices, but real two-device
 testing by the user is still the right final check before relying on
 this for actual funds.
+
+## 33. Multi-recipient batch sends (both platforms) (2026-08-13)
+
+Requested alongside push notifications as two follow-up features.
+Built first since it had no external dependency or blocker, unlike
+push notifications (see section 34).
+
+### 33.1 Nothing needed to change at the signing layer
+
+Checked both platforms' low-level transaction builders before writing
+any UI: `web-wallet/crypto.js`'s `buildAndSignTransaction()` and
+`cac_wallet/lib/crypto/transaction.dart`'s `buildAndSignTransaction()`
+already accept an arbitrary `outputs` list -- neither was ever
+hardcoded to "one destination + one change output," that assumption
+only existed one layer up, in the single-recipient UI/service code
+that always built exactly a 2-output list. So this feature is purely
+a UI and service-layer change; the actual multi-output transaction
+construction and signing needed zero changes.
+
+### 33.2 Implementation
+
+**Mobile** (`cac_wallet`): `WalletService.sendTransaction()`'s
+signature changed from a single `toAddress`/`amountSatoshis` pair to
+`List<SendRecipient>` (a small new `{address, amountSatoshis}` class);
+internally it now builds one destination `TxOutputSpec` per recipient
+plus the usual single change output. `send_screen.dart` was rewritten
+around a `List<_RecipientRow>` of per-row controllers with add/remove
+buttons (Remove hidden when there's only one row) instead of one fixed
+address/amount pair; coin selection and fee-estimate vsize now scale
+output count with recipient count (`recipients.length + 1`) instead of
+the fixed `2` a single-recipient send always used.
+
+**Web** (`web-wallet`): the send form's fixed `#send-address`/
+`#send-amount` inputs were replaced with a dynamically-built
+`#send-recipients` container (`recipientRowHtml`/`wireRecipientRow` in
+`app.js`) plus an "+ Add recipient" button, each row with its own
+address field, QR-scan button, and amount field. The address book's
+"Use" button no longer targets one fixed field -- it fills whichever
+recipient row's address field was most recently focused
+(`state.activeSendRecipientId`, falling back to the first row if that
+row's since been removed). The fiat estimate under the form now sums
+every row's amount and prefixes "Total:" once there's more than one
+recipient. Same output-count-scales-with-recipient-count fee-estimate
+change as mobile.
+
+### 33.3 Verified
+
+Mobile: `flutter analyze` clean, full test suite green (61 tests --
+none needed to change, since no test called `sendTransaction`'s old
+signature directly); a real `flutter build apk --release` succeeds.
+
+Web: no JS test suite exists for `web-wallet` (confirmed no
+`package.json`/test directory), so verified directly in-browser
+against a real (throwaway, previously-used) wallet: added a second
+recipient row, confirmed the Remove button appears only once there are
+2+ rows and correctly removes just that row, confirmed the fiat
+estimate correctly sums both rows' amounts with a "Total:" prefix and
+reverts to single-recipient formatting after removing back down to
+one, confirmed the address book's "Use" button fills the second
+(last-focused) row rather than always the first, and confirmed the
+Send button's full coin-selection/build path executes cleanly through
+to the same "could not reach the network" failure Home already shows
+in this sandboxed environment (an environment limitation, not a code
+issue) rather than throwing a JS error.
+
+## 34. Native mobile push notifications for incoming payments
+(2026-08-13)
+
+Requested alongside section 33. `web-wallet` already has push
+notifications (see `vps-gateway/push.py`/`staking.py`, and the
+"Add web push notifications to web-wallet" CHANGELOG entry), but that
+system is Web Push (VAPID, RFC 8291/8292) -- a browser-only mechanism
+(`navigator.serviceWorker` + `PushManager`) with no equivalent in the
+Flutter app, and it's also scoped only to staking-pool events (deposit
+funded, reward earned), not general "you received a payment" alerts
+for an arbitrary address. This section covers both gaps: a genuinely
+native mechanism for mobile (FCM), and a new trigger for ordinary
+incoming payments, not just staking events.
+
+### 34.1 A real, disclosed blocker: this needs a Firebase project
+
+Unlike VAPID (self-generated keys, no third party involved), native
+push on Android/iOS needs a Firebase project -- specifically a service
+account credential for the gateway to authenticate to FCM's send API,
+and (for the Flutter app itself) four values that identify that
+project. Account/project creation is something this assistant can't
+do on the user's behalf, same standing constraint already hit for the
+Reown/WalletConnect project ID (section 31) -- the user created that
+project and is expected to supply these credentials the same way.
+
+Everything in this section was built and verified as fully as
+possible without those credentials, and is designed to stay
+completely inert (no crash, no broken build, just a clear "not set up
+yet" message) until they're supplied. Nothing here was deployed to
+the live gateway in this pass -- see 34.5.
+
+### 34.2 Why Dart-side Firebase initialization, not
+google-services.json
+
+The usual Android setup drops a `google-services.json` file into the
+project and applies the `com.google.gms.google-services` Gradle
+plugin, which fails the *build* (not just push functionality) if that
+file is missing or its package name doesn't match. Using that here
+would have broken this project's already-verified, already-deployed
+Android build the moment the dependency was added, for a feature that
+can't be functional yet anyway.
+
+Instead, `cac_wallet` uses FlutterFire's supported alternative:
+`Firebase.initializeApp(options: FirebaseOptions(...))`, passing the
+four config values explicitly from Dart
+(`lib/services/firebase_config.dart`) rather than a native config
+file. Confirmed this is a real, currently-documented pattern (not a
+guess) before relying on it, and then confirmed empirically that it
+actually holds: a full `flutter build apk --release` succeeds with
+`firebase_core`/`firebase_messaging` added and zero native Firebase
+config anywhere in the Android project tree. The four values in
+`firebase_config.dart` are left blank; `isFirebaseConfigured` is false
+until they're filled in (extracted from the real `google-services.json`
+once the user has one -- see that file's own comments for exactly
+which four fields), and every push code path checks that flag before
+doing anything.
+
+`firebase_core`/`firebase_messaging` needed the same
+below-the-Dart-SDK-bump pinning this project has applied to several
+other packages already (`mobile_scanner`, `share_plus`, `reown_appkit`):
+`firebase_core: ^3.4.0` (below 3.5.0's `firebase_core_web` bump to
+Dart >=3.4.0) and `firebase_messaging: ^15.0.4` (below 15.1.3's
+equivalent `firebase_messaging_web` bump) -- this SDK is Dart 3.3.4.
+
+### 34.3 Design: address-keyed, not account-keyed
+
+`push_subscriptions` (the existing Web Push table) is keyed by
+`user_id` -- tied to a staking-service login. Requiring a mobile
+wallet to create a staking account just to get notified about an
+ordinary payment would be a real regression in what this feature
+should cost the user, so `mobile_push_registrations` (new table) is
+keyed by address instead, with no auth required on
+`/v1/push/mobile/register` -- the same no-auth, address-keyed
+convention already used by `/v1/address/<address>/balance` and its
+neighbors, not a new pattern invented for this feature.
+
+Detecting "a payment arrived" is deliberately a simple balance diff
+(`mobile_notify.py`'s `check_incoming_payments()`, run from the same
+periodic `watcher.py` process as the staking pool's watcher pass, but
+as its own independent step) rather than per-UTXO tracking: each
+registration stores `last_notified_balance`, and a push fires only
+when an address's current confirmed+unconfirmed total exceeds it. The
+module's own docstring is explicit about what this can't do (net a
+same-interval receive-then-spend into one notification; miss a
+balance that dips and returns to exactly its prior value within one
+interval) -- accepted as a phase-appropriate simplification, same
+spirit as several other "known limitation, documented rather than
+hidden" notes already in this file (e.g. section 4's fee estimation).
+
+### 34.4 Implementation
+
+**Gateway** (`vps-gateway`): `push_mobile.py` (FCM HTTP v1 send, OAuth2
+via a service-account JWT through `google-auth`, no-op-if-unconfigured
+exactly matching `push.py`'s existing convention) is a new, separate
+module from `push.py` -- different mechanism, different audience, no
+reason to conflate them. `mobile_notify.py` (the balance-diff watcher
+above) is only ever invoked from `watcher.py`'s standalone script
+process, which is specifically why it can safely `import app` to reuse
+`app.py`'s already-verified `ensure_address_watched`/`is_valid_address`
+rather than duplicating that RPC/wallet-loading logic -- `app.py`
+never imports it back, so there's no cycle. New table
+`mobile_push_registrations` in `db.py`. New dependencies:
+`requests`, `google-auth`.
+
+**Mobile** (`cac_wallet`): `lib/services/firebase_config.dart` (the
+four placeholder values, see 34.2) and `lib/services/push_service.dart`
+(permission request + token fetch + registration, every path gated on
+`isFirebaseConfigured`). New Settings screen card, "Notifications" --
+shows the "not set up yet" message when unconfigured, or an "Enable
+notifications" button for the active address when it is. New
+`GatewayApi.registerPushToken()`.
+
+### 34.5 What was and wasn't verified
+
+Verified: `flutter analyze` clean; a real `flutter build apk --release`
+succeeds with the new dependencies and zero native Firebase config
+present, confirming the Dart-only initialization approach (34.2)
+genuinely avoids breaking the build. Gateway: all new/modified Python
+files pass `python3 -m py_compile`; `push_mobile.py`, `mobile_notify.py`,
+and `app.py`'s new endpoint all import cleanly in the project's
+existing venv (installed the two new dependencies to confirm, not just
+assumed they'd resolve); `mobile_notify.check_incoming_payments()` runs
+correctly end-to-end against a fresh local DB with zero registrations
+(the common "nothing to do" case); the new `/v1/push/mobile/register`
+endpoint's request-validation paths (missing fields, invalid platform)
+verified directly via Flask's test client.
+
+Not verified, and not verifiable without the Firebase project this
+section is blocked on: an actual FCM send succeeding, a real device
+receiving a push, and the incoming-payment watcher's happy path
+against a real node with a real balance change (only the empty-registration
+path was exercised, since this environment has no live codexacoind RPC
+to check a real address against). None of the gateway changes in this
+section have been deployed to the live VPS -- doing that is a separate,
+explicit step once real Firebase credentials are supplied and
+confirmed with the user first, not bundled into this pass.
