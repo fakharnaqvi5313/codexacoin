@@ -449,11 +449,15 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
       // than real dynamic fee estimation (this gateway has none, a known
       // limitation noted in mobile-api.md section 4).
       const estimatedVsize = BigInt(10 + chosen.length * 148 + outputCount * 34);
-      const feeSatoshis = (feeRate * estimatedVsize) / 1000n;
+      // Round up, not down -- the node's own CFeeRate::GetFee() rounds up
+      // (ceil), so a floor here computes exactly 1 satoshi too little on
+      // almost every real transaction and gets rejected as
+      // bad-txns-fee-not-enough.
+      const feeSatoshis = (feeRate * estimatedVsize + 999n) / 1000n;
       if (totalIn >= amountTotalSatoshis + feeSatoshis) break;
     }
     const finalVsize = BigInt(10 + chosen.length * 148 + outputCount * 34);
-    const feeSatoshis = (feeRate * finalVsize) / 1000n;
+    const feeSatoshis = (feeRate * finalVsize + 999n) / 1000n;
     if (totalIn < amountTotalSatoshis + feeSatoshis) {
       errEl.textContent = `Insufficient funds: have ${formatCac(totalIn)}, need ${formatCac(amountTotalSatoshis + feeSatoshis)}`;
       return;
@@ -534,7 +538,7 @@ async function bumpFee(txid) {
   const feeResp = await state.gateway.feeEstimate();
   const feeRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
   const estimatedVsize = BigInt(10 + record.inputs.length * 148 + record.outputs.length * 34);
-  const rateBasedFee = Number((feeRate * estimatedVsize) / 1000n);
+  const rateBasedFee = Number((feeRate * estimatedVsize + 999n) / 1000n);
   // Must be a *meaningfully* higher fee, not just technically higher
   // (BIP125 rule 4 requires paying for the replacement's own bandwidth
   // too) -- take whichever is larger of "fresh rate estimate" and "50%
@@ -1160,11 +1164,15 @@ document.getElementById("btn-ms-propose").addEventListener("click", async () => 
       // precise, the same "no real dynamic fee estimation" limitation
       // noted for the ordinary send flow above.
       const estimatedVsize = BigInt(10 + chosen.length * (redeemScript.length + 150) + 2 * 34);
-      const feeSatoshis = (feeRate * estimatedVsize) / 1000n;
+      // Round up, not down -- the node's own CFeeRate::GetFee() rounds up
+      // (ceil), so a floor here computes exactly 1 satoshi too little on
+      // almost every real transaction and gets rejected as
+      // bad-txns-fee-not-enough.
+      const feeSatoshis = (feeRate * estimatedVsize + 999n) / 1000n;
       if (totalIn >= amountSatoshis + feeSatoshis) break;
     }
     const finalVsize = BigInt(10 + chosen.length * (redeemScript.length + 150) + 2 * 34);
-    const feeSatoshis = (feeRate * finalVsize) / 1000n;
+    const feeSatoshis = (feeRate * finalVsize + 999n) / 1000n;
     if (totalIn < amountSatoshis + feeSatoshis) {
       errEl.textContent = `Insufficient funds at this address: have ${formatCac(totalIn)}, need ${formatCac(amountSatoshis + feeSatoshis)}`;
       return;

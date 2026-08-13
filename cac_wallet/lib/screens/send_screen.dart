@@ -159,11 +159,15 @@ class _SendScreenState extends State<SendScreen> {
         chosen.add(u);
         totalIn += u.valueSatoshis;
         final estimatedVsize = 10 + chosen.length * 148 + outputCount * 34;
-        final feeSatoshis = (feeRate * estimatedVsize) ~/ 1000;
+        // Round up, not down -- the node's own CFeeRate::GetFee() rounds up
+        // (ceil), so truncating division here computes exactly 1 satoshi
+        // too little on almost every real transaction and gets rejected as
+        // bad-txns-fee-not-enough.
+        final feeSatoshis = (feeRate * estimatedVsize + 999) ~/ 1000;
         if (totalIn >= amountTotalSatoshis + feeSatoshis) break;
       }
       final finalVsize = 10 + chosen.length * 148 + outputCount * 34;
-      final feeSatoshis = (feeRate * finalVsize) ~/ 1000;
+      final feeSatoshis = (feeRate * finalVsize + 999) ~/ 1000;
       if (totalIn < amountTotalSatoshis + feeSatoshis) {
         throw StateError('Insufficient funds: have $totalIn, need ${amountTotalSatoshis + feeSatoshis}');
       }

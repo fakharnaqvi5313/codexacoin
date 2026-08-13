@@ -144,11 +144,11 @@ class _MultisigScreenState extends State<MultisigScreen> {
         // "no real dynamic fee estimation" limitation as the ordinary
         // send flow.
         final estimatedVsize = 10 + chosen.length * (redeemScript.length + 150) + 2 * 34;
-        final feeSatoshis = (feeRate * estimatedVsize) ~/ 1000;
+        final feeSatoshis = (feeRate * estimatedVsize + 999) ~/ 1000;
         if (totalIn >= amountSatoshis + feeSatoshis) break;
       }
       final finalVsize = 10 + chosen.length * (redeemScript.length + 150) + 2 * 34;
-      final feeSatoshis = (feeRate * finalVsize) ~/ 1000;
+      final feeSatoshis = (feeRate * finalVsize + 999) ~/ 1000;
       if (totalIn < amountSatoshis + feeSatoshis) {
         setState(() => _proposeError =
             'Insufficient funds at this address: have $totalIn, need ${amountSatoshis + feeSatoshis}');
