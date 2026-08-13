@@ -173,6 +173,12 @@ select option {
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; }
 
+#send-fee-row { align-items: center; gap: 6px; }
+#send-fee-row > * { flex: none; }
+#send-fee-row .field-label { margin-right: 4px; }
+#send-fee-row button { padding: 4px 10px; }
+#send-fee-rate { width: 70px; text-align: center; flex: none; }
+
 .tabbar {
   display: flex;
   border-top: 1px solid var(--border);

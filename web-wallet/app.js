@@ -25,6 +25,8 @@ const state = {
   gateway: null,
   stakeToken: sessionStorage.getItem("cac_stake_token") || null,
   qrScanHandle: null,
+  sendFeeMinRate: null, // BigInt, the gateway's own recommended/minimum rate, fetched fresh per screen visit
+  sendFeeRateOverride: null, // BigInt or null -- null means "use the recommended rate"
 };
 
 function refreshGateway() {
@@ -119,7 +121,7 @@ function showScreen(name) {
   document.getElementById(`screen-${name}`).classList.add("active");
   document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b.dataset.screen === name));
   if (name === "home") loadHome();
-  if (name === "send") { loadAddressBook(); loadSendAmountFiat(); }
+  if (name === "send") { loadAddressBook(); loadSendAmountFiat(); loadSendFeeRate(); }
   if (name === "receive") loadReceive();
   if (name === "history") loadHistory();
   if (name === "staking") loadStaking();
@@ -247,6 +249,17 @@ document.getElementById("btn-restore-confirm").addEventListener("click", async (
 });
 
 // ------------------------------------------------------------- app lock
+
+// Declared here (not down by the polling functions that use it, in the
+// "live new-tx banner" section below) because boot() -- called a few
+// lines down -- can synchronously reach into enterWallet() and start
+// polling before this module has finished evaluating top to bottom.
+// `let` bindings are in the temporal dead zone until their own
+// declaration line runs, so leaving this next to startTxPolling()
+// further down the file threw "Cannot access 'txPollHandle' before
+// initialization" for any user with an existing wallet and no PIN set
+// (the boot() path that calls enterWallet() synchronously).
+let txPollHandle = null;
 
 async function boot() {
   if (storage.isPinSet()) {
@@ -435,7 +448,12 @@ document.getElementById("btn-send-confirm").addEventListener("click", async () =
 
     const allUtxos = await gatherAllUtxos();
     const feeResp = await state.gateway.feeEstimate();
-    const feeRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
+    const minRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
+    state.sendFeeMinRate = minRate; // keep in sync in case it drifted since the screen loaded
+    // Use the user's chosen rate only if it's still above the current
+    // floor -- protects against a stale override surviving a floor
+    // increase and getting rejected again.
+    const feeRate = state.sendFeeRateOverride != null && state.sendFeeRateOverride > minRate ? state.sendFeeRateOverride : minRate;
 
     // Output count scales with recipient count now (N destinations + 1
     // change), not the fixed 2 a single-recipient send always had.
@@ -702,7 +720,73 @@ function updateSendAmountFiat() {
   const sourceLabel = sendScreenPrice.source === "bnb" ? "PancakeSwap (BNB Chain)" : "Stellar DEX";
   const prefix = rows.length > 1 ? "Total: " : "";
   el.textContent = `${prefix}~$${usdValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} (estimated -- thin ${sourceLabel} liquidity, not a reliable market price)`;
+  updateSendFeeEstimate();
 }
+
+// Adjustable network fee. Defaults to the gateway's own recommended rate
+// (its floor). Users can raise it (e.g. wanting to be extra safe), but
+// can't go below it -- this coin enforces a single fixed consensus
+// minimum fee rate, not a real congestion-based market (see
+// mobile-api.md section 4), so anything lower would just get the
+// transaction rejected; the control clamps there instead of offering a
+// choice that can't actually work.
+async function loadSendFeeRate() {
+  try {
+    const feeResp = await state.gateway.feeEstimate();
+    state.sendFeeMinRate = BigInt(feeResp.fee_rate_sat_per_vbyte);
+    state.sendFeeRateOverride = null;
+    const input = document.getElementById("send-fee-rate");
+    input.min = state.sendFeeMinRate.toString();
+    input.value = state.sendFeeMinRate.toString();
+  } catch (e) {
+    // Same "network unreachable" reality as loadHome's balance fetch --
+    // leave the fee row empty rather than throwing; the send button's own
+    // handler will surface a real error if the user actually tries to send.
+    state.sendFeeMinRate = null;
+  }
+  updateSendFeeEstimate();
+}
+function effectiveSendFeeRate() {
+  return state.sendFeeRateOverride ?? state.sendFeeMinRate ?? 0n;
+}
+function updateSendFeeEstimate() {
+  const el = document.getElementById("send-fee-estimate");
+  if (!el) return;
+  if (state.sendFeeMinRate == null) {
+    el.textContent = "";
+    return;
+  }
+  const rate = effectiveSendFeeRate();
+  const rowCount = document.querySelectorAll(".recipient-row").length || 1;
+  const outputCount = rowCount + 1;
+  // Single-input estimate for display only -- the real send picks
+  // however many inputs it actually needs at confirm time. Same "no real
+  // dynamic fee estimation" caveat as the rest of this gateway's fee
+  // handling (mobile-api.md section 4).
+  const roughVsize = BigInt(10 + 148 + outputCount * 34);
+  const roughFee = (rate * roughVsize + 999n) / 1000n;
+  el.textContent = `~${formatCac(roughFee)} CAC for a single-input send (scales up with more inputs/recipients) -- recommended: ${state.sendFeeMinRate} sat/vB`;
+}
+function setSendFeeRate(rate) {
+  if (state.sendFeeMinRate == null) return;
+  const ceiling = state.sendFeeMinRate * 50n;
+  const clamped = rate < state.sendFeeMinRate ? state.sendFeeMinRate : rate > ceiling ? ceiling : rate;
+  state.sendFeeRateOverride = clamped === state.sendFeeMinRate ? null : clamped;
+  document.getElementById("send-fee-rate").value = clamped.toString();
+  updateSendFeeEstimate();
+}
+document.getElementById("btn-fee-decrease").addEventListener("click", () => setSendFeeRate(effectiveSendFeeRate() - 10n));
+document.getElementById("btn-fee-increase").addEventListener("click", () => setSendFeeRate(effectiveSendFeeRate() + 10n));
+document.getElementById("btn-fee-reset").addEventListener("click", () => setSendFeeRate(state.sendFeeMinRate ?? 0n));
+document.getElementById("send-fee-rate").addEventListener("change", (e) => {
+  const parsed = parseInt(e.target.value, 10);
+  if (!isFinite(parsed) || parsed <= 0) {
+    setSendFeeRate(state.sendFeeMinRate ?? 0n);
+    return;
+  }
+  setSendFeeRate(BigInt(parsed));
+});
+
 document.getElementById("btn-view-on-explorer").addEventListener("click", () => {
   window.open(`https://codexacoin.com/blockexplorer/#/address/${activeAddress()}`, "_blank", "noopener");
 });
@@ -782,8 +866,6 @@ async function loadHistory() {
 }
 
 // ------------------------------------------------- live new-tx banner
-
-let txPollHandle = null;
 
 function seenTxids(txs) {
   if (!state._seenTxids) state._seenTxids = new Set();
@@ -953,7 +1035,43 @@ async function loadStaking() {
     // Non-fatal -- staking status above already handles auth expiry; a
     // referral-status hiccup shouldn't block the rest of the screen.
   }
+  try {
+    const { referrals } = await state.gateway.referralHistory(state.stakeToken);
+    const listEl = document.getElementById("referral-history-list");
+    if (!referrals.length) {
+      listEl.innerHTML = `<p class="notice">No referrals yet.</p>`;
+    } else {
+      listEl.innerHTML = referrals
+        .map((r) => {
+          const joined = new Date(r.joined_at * 1000).toLocaleDateString();
+          let status;
+          if (r.amount_satoshis == null) status = "no funded deposit yet";
+          else if (r.withdrawn) status = `${formatCac(r.amount_satoshis)} CAC earned (withdrawn)`;
+          else status = `${formatCac(r.amount_satoshis)} CAC earned (available)`;
+          return `<div class="stat-row"><span>${escapeHtml(r.referred_email_masked)} (joined ${joined})</span><span>${escapeHtml(status)}</span></div>`;
+        })
+        .join("");
+    }
+  } catch (e) {
+    // Non-fatal, same reasoning as the referral-status fetch above.
+  }
 }
+
+document.getElementById("btn-referral-copy").addEventListener("click", async () => {
+  const code = document.getElementById("stat-referral-code").textContent;
+  if (!code || code === "-") return;
+  const btn = document.getElementById("btn-referral-copy");
+  try {
+    await navigator.clipboard.writeText(code);
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  } catch (e) {
+    // Clipboard API can be unavailable (non-HTTPS, permissions) -- the
+    // code is already visible as selectable text, so this is a
+    // convenience, not the only way to get it.
+  }
+});
 
 async function stakeAuth(action) {
   const errEl = document.getElementById("stake-auth-error");

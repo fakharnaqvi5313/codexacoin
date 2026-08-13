@@ -104,6 +104,15 @@
         <div id="send-recipients"></div>
         <button class="secondary" id="btn-add-recipient" type="button">+ Add recipient</button>
         <p class="notice small" id="send-amount-fiat"></p>
+        <div class="row" id="send-fee-row">
+          <span class="field-label">Network fee</span>
+          <button class="secondary" id="btn-fee-decrease" type="button" title="Decrease fee rate">&minus;</button>
+          <input type="number" id="send-fee-rate" step="10" />
+          <span class="notice small">sat/vB</span>
+          <button class="secondary" id="btn-fee-increase" type="button" title="Increase fee rate">+</button>
+          <button class="secondary" id="btn-fee-reset" type="button">Reset</button>
+        </div>
+        <p class="notice small" id="send-fee-estimate"></p>
         <button class="primary" id="btn-send-confirm">Send</button>
         <div class="error" id="send-error"></div>
         <div class="success" id="send-success"></div>
@@ -246,7 +255,13 @@
         <p class="notice">Share your code. When someone signs up with it and
            makes their first deposit, you get 10% of that deposit, credited
            here -- withdraw it to any address whenever you like.</p>
-        <div class="stat-row"><span>Your code</span><span id="stat-referral-code" class="mono">-</span></div>
+        <div class="stat-row">
+          <span>Your code</span>
+          <span>
+            <span id="stat-referral-code" class="mono">-</span>
+            <button class="secondary" id="btn-referral-copy" type="button" title="Copy referral code">Copy</button>
+          </span>
+        </div>
         <div class="stat-row"><span>People referred</span><span id="stat-referral-count">0</span></div>
         <div class="stat-row"><span>Available to withdraw</span><span id="stat-referral-available">0 CAC</span></div>
         <label class="field-label">Withdraw to address</label>
@@ -254,6 +269,9 @@
         <button class="secondary" id="btn-referral-withdraw">Withdraw referral credit</button>
         <div class="error" id="referral-action-error"></div>
         <div class="success" id="referral-action-success"></div>
+        <hr style="border-color:var(--border);margin:16px 0" />
+        <p class="field-label">Referral history</p>
+        <div id="referral-history-list"><p class="notice">No referrals yet.</p></div>
       </div>
     </section>
 
