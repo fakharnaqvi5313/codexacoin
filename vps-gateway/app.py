@@ -554,6 +554,14 @@ def referral_status():
     return jsonify(referral.status_for_user(user_id))
 
 
+@app.route("/v1/referral/history")
+def referral_history():
+    user_id, err = require_auth()
+    if err:
+        return err
+    return jsonify({"referrals": referral.history_for_user(user_id)})
+
+
 @app.route("/v1/referral/withdraw", methods=["POST"])
 @limiter.limit("20 per hour")
 def referral_withdraw():

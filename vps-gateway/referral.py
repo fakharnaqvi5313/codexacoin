@@ -88,6 +88,44 @@ def credit_referral_if_eligible(user_id, deposit_id, amount_satoshis):
         conn.commit()
 
 
+def _mask_email(email):
+    local, _, domain = email.partition("@")
+    if not domain:
+        return "***"
+    visible = local[:1] or "*"
+    return f"{visible}{'*' * max(len(local) - 1, 3)}@{domain}"
+
+
+def history_for_user(user_id):
+    """Every user this account referred, whether or not they've funded a
+    deposit yet -- not just the ones that generated a credit -- so a
+    referrer can see who signed up with their code, not only who's paid
+    out. Referred users' emails are masked; this is the referrer's own
+    dashboard, not an admin tool, so full contact details of someone
+    else's account shouldn't be exposed here."""
+    with db.db() as conn:
+        rows = conn.execute(
+            """SELECT u.email, u.created_at AS joined_at,
+                      rc.amount_satoshis, rc.credited_at, rc.withdrawn_at
+               FROM users u
+               LEFT JOIN referral_credits rc
+                 ON rc.referred_user_id = u.id AND rc.referrer_user_id = ?
+               WHERE u.referred_by = ?
+               ORDER BY u.created_at DESC""",
+            (user_id, user_id),
+        ).fetchall()
+    return [
+        {
+            "referred_email_masked": _mask_email(row["email"]),
+            "joined_at": row["joined_at"],
+            "amount_satoshis": row["amount_satoshis"],
+            "credited_at": row["credited_at"],
+            "withdrawn": row["withdrawn_at"] is not None,
+        }
+        for row in rows
+    ]
+
+
 def status_for_user(user_id):
     with db.db() as conn:
         row = conn.execute("SELECT referral_code FROM users WHERE id = ?", (user_id,)).fetchone()
