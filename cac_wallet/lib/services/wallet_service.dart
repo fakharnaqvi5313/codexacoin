@@ -172,6 +172,24 @@ class WalletService extends ChangeNotifier {
     return _gateway.stakingWithdraw(token, amountSatoshis, toAddress);
   }
 
+  Future<Map<String, dynamic>> fetchReferralStatus() {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.referralStatus(token);
+  }
+
+  Future<Map<String, dynamic>> fetchReferralHistory() {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.referralHistory(token);
+  }
+
+  Future<Map<String, dynamic>> referralWithdraw(String toAddress) {
+    final token = _stakeToken;
+    if (token == null) throw StateError('Not logged in to staking');
+    return _gateway.referralWithdraw(token, toAddress);
+  }
+
   Future<String> createNewWallet() async {
     final mnemonic = generateMnemonic();
     await _storage.saveMnemonic(mnemonic);

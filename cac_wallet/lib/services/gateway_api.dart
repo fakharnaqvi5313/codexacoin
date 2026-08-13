@@ -129,6 +129,15 @@ class GatewayApi {
         'to_address': toAddress,
       }, auth: authToken);
 
+  Future<Map<String, dynamic>> referralStatus(String authToken) =>
+      _get('/referral/status', auth: authToken);
+
+  Future<Map<String, dynamic>> referralHistory(String authToken) =>
+      _get('/referral/history', auth: authToken);
+
+  Future<Map<String, dynamic>> referralWithdraw(String authToken, String toAddress) =>
+      _post('/referral/withdraw', {'to_address': toAddress}, auth: authToken);
+
   // -- native mobile push (FCM) -- no auth required, address-keyed like
   // the balance/utxo/history endpoints above rather than requiring a
   // staking-service login. See vps-gateway/app.py's push_mobile_register

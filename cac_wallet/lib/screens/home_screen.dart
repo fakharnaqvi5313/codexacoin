@@ -15,6 +15,7 @@ import 'multisig_screen.dart';
 import 'offline_send_screen.dart';
 import 'offline_sign_screen.dart';
 import 'receive_screen.dart';
+import 'referral_screen.dart';
 import 'send_screen.dart';
 import 'settings_screen.dart';
 import 'staking_screen.dart';
@@ -231,6 +232,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
+              icon: Icons.card_giftcard_outlined,
+              label: 'Referrals',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReferralScreen()),
+              ),
             ),
             const SizedBox(height: 12),
             _ActionButton(

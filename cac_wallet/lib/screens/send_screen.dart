@@ -44,11 +44,42 @@ class _SendScreenState extends State<SendScreen> {
   // whatever's typed -- no point re-hitting the price API per keystroke.
   CacPrice? _price;
 
+  // Adjustable network fee. Defaults to the gateway's own recommended
+  // rate (its floor) -- can be raised, but not lowered below it: this
+  // coin enforces a single fixed consensus minimum fee rate, not a real
+  // congestion market (see mobile-api.md section 4), so anything lower
+  // would just get the transaction rejected.
+  int? _minFeeRate;
+  int? _feeRateOverride;
+  final _feeRateController = TextEditingController();
+
+  int get _effectiveFeeRate => _feeRateOverride ?? _minFeeRate ?? 1;
+
+  void _setFeeRate(int rate) {
+    if (_minFeeRate == null) return;
+    final ceiling = _minFeeRate! * 50;
+    final clamped = rate < _minFeeRate! ? _minFeeRate! : (rate > ceiling ? ceiling : rate);
+    setState(() {
+      _feeRateOverride = clamped == _minFeeRate ? null : clamped;
+      _feeRateController.text = clamped.toString();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     fetchCacUsdPrice().then((p) {
       if (mounted) setState(() => _price = p);
+    });
+    final wallet = context.read<WalletService>();
+    wallet.gateway.feeEstimate().then((json) {
+      final rate = int.tryParse(json['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
+      if (mounted) {
+        setState(() {
+          _minFeeRate = rate;
+          _feeRateController.text = rate.toString();
+        });
+      }
     });
     // Rebuilds on every keystroke so the fiat estimate below stays
     // current -- setState with no controller-derived state change is
@@ -148,7 +179,12 @@ class _SendScreenState extends State<SendScreen> {
       }
 
       final feeJson = await wallet.gateway.feeEstimate();
-      final feeRate = int.tryParse(feeJson['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
+      final minRate = int.tryParse(feeJson['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
+      _minFeeRate = minRate; // keep in sync in case it drifted since the screen loaded
+      // Use the user's chosen rate only if it's still above the current
+      // floor -- protects against a stale override surviving a floor
+      // increase and getting rejected again.
+      final feeRate = _feeRateOverride != null && _feeRateOverride! > minRate ? _feeRateOverride! : minRate;
 
       // Output count scales with recipient count now (N destinations +
       // 1 change), not the fixed 2 a single-recipient send always had.
@@ -198,6 +234,7 @@ class _SendScreenState extends State<SendScreen> {
     for (final r in _recipients) {
       r.dispose();
     }
+    _feeRateController.dispose();
     super.dispose();
   }
 
@@ -278,7 +315,49 @@ class _SendScreenState extends State<SendScreen> {
               ),
             );
           }),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          if (_minFeeRate != null) ...[
+            Row(
+              children: [
+                Text('Network fee', style: Theme.of(context).textTheme.labelLarge),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline),
+                  tooltip: 'Decrease fee rate',
+                  onPressed: () => _setFeeRate(_effectiveFeeRate - 10),
+                ),
+                SizedBox(
+                  width: 64,
+                  child: TextField(
+                    controller: _feeRateController,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                    onSubmitted: (v) => _setFeeRate(int.tryParse(v) ?? _minFeeRate!),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'Increase fee rate',
+                  onPressed: () => _setFeeRate(_effectiveFeeRate + 10),
+                ),
+                TextButton(
+                  onPressed: () => _setFeeRate(_minFeeRate!),
+                  child: const Text('Reset'),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'sat/vB -- recommended: $_minFeeRate sat/vB (this coin has a '
+                'single fixed network minimum, not a real congestion '
+                'market, so the rate can\'t go lower)',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
           if (_error != null) Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: Text(_error!, style: const TextStyle(color: Colors.red)),
